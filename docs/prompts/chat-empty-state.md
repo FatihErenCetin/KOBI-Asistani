@@ -1,147 +1,228 @@
-# Prompt: AI Asistan `ChatPanel` Empty State + Genel İyileştirme
+# Prompt: AI Asistan `ChatPanel` — Persistent Chips + History Sidebar v2
 
-> Bu dosyanın TAMAMINI Claude Design'a (veya başka bir UI üretici LLM'e) tek mesaj olarak yapıştır.
-> Çıktı: tek dosya `frontend/components/chat/ChatPanel.tsx` drop-in replacement.
+> Bu dosyanın TAMAMINI Claude Design'a tek mesaj olarak yapıştır.
+> Çıktı: `frontend/components/chat/ChatPanel.tsx` drop-in replacement (history sidebar dahil inline veya küçük helper component'lerle aynı dosya içinde).
 
 ---
 
-Sen kıdemli bir Next.js + Tailwind UI tasarımcısısın. Aşağıdaki tasarım brief'ini oku ve **`ChatPanel.tsx` bileşenini yeniden yaz** — özellikle empty state'i ve mesaj balonlarını iyileştirerek.
+Sen kıdemli bir Next.js + Tailwind UI tasarımcısısın. Aşağıdaki tasarım brief'ini oku ve **`ChatPanel.tsx` bileşenini yeniden yaz**. Bu **v2** versiyondur — mevcut bileşen zaten welcome state + suggested chip'leri içeriyor; bu iterasyonda **3 yeni özellik** eklemen gerek.
+
+## v2 Yeni Özellikler (zorunlu)
+
+### A. Suggested chip'ler her zaman erişilebilir
+
+Mevcut tasarımda chip'ler sadece **empty state**'te görünüyor. Kullanıcı ilk mesajı atınca chip'ler kayboluyor.
+
+**Yeni davranış:** Chip'ler **input bar'ın hemen üstünde** kompakt bir şerit olarak **kalıcı** kalsın (sticky). Empty state'te büyük kart'lar + altta kompakt şerit; konuşma başlayınca büyük kartlar kaybolur ama kompakt şerit kalır.
+
+- Empty state chip'leri: 2x2 grid, iconlu büyük kartlar (mevcut)
+- Konuşma başlayınca: input'un hemen üzerinde **tek satır horizontal scroll** chip'leri (yatay kaydırılabilir, telefon stickers gibi)
+- Aynı 4 prompt; ama compact varyant daha küçük (`text-xs px-3 py-1.5 rounded-full`)
+
+### B. Sol tarafta Chat History Sidebar
+
+`/chat` sayfasına geldiğinde **sayfanın sol tarafında** (ana app sidebar'ı **yanında**, ana içerikten önce) yeni bir history panel görünmeli:
+
+- **Genişlik:** ~260px (tablet'te collapse'a düşer)
+- **Üstte "+ Yeni Sohbet" butonu**
+- Altında **geçmiş sohbet listesi** — her satır:
+  - Başlık: ilk kullanıcı mesajının ilk 40 karakteri
+  - Alt satır: relative time ("2 saat önce", "dün")
+  - Hover state, aktif sohbet vurgulu
+  - Sağ tarafta küçük `×` ikonu — tek sohbeti silme
+- **Boş history:** "Henüz sohbet yok" + minimal illustration veya ikon
+- Sidebar'ın **kendi scroll'u** olmalı; ana içerik scroll'undan bağımsız
+
+### C. Türkçe karakter beklentisi (bilgi)
+
+Backend (panel_persona.md) Türkçe karakterleri (ş, ç, ğ, ü, ö, ı, İ) kullanmaya zorlanacak. UI tarafında **hiçbir karakter dönüşümü yapma** — backend'den ne gelirse aynen render et. Sadece UI'da kendi yazdığın label/placeholder/welcome text'lerde Türkçe karakter eksiksiz olsun:
+
+- ❌ "Dusuk stoklar"
+- ✅ "Düşük stoklar"
+
+## Persistence (localStorage)
+
+Chat history için **backend gerekmiyor**, frontend-only çözüm:
+
+```ts
+// localStorage key: "kobi-chat-conversations"
+type Conversation = {
+  id: string;          // crypto.randomUUID()
+  title: string;       // ilk kullanıcı mesajının ilk 40 karakteri
+  turns: Turn[];
+  created_at: string;  // ISO
+  updated_at: string;  // ISO
+};
+```
+
+**Davranış:**
+- Sayfa yüklenince `localStorage.getItem("kobi-chat-conversations")` okur, listeyi sidebar'a doldurur
+- Aktif sohbet ID'si bir state'te tutulur — yoksa "yeni sohbet" durumu (empty state)
+- Kullanıcı mesaj atınca:
+  - Eğer aktif sohbet yoksa yeni `Conversation` yaratılır, title = ilk mesajın ilk 40 char
+  - Mevcut conversation `turns` array'i güncellenir
+  - `updated_at` yenilenir
+  - localStorage'a tamamı serialize edilir
+- "+ Yeni Sohbet" → aktif ID null, turns state boşalır, empty state görünür
+- Sidebar'da bir sohbete tıklanınca → aktif ID set, turns o sohbetin turns'ünden yüklenir
+- Sohbet silme → confirm dialog (`window.confirm` yeterli, ek lib yok), localStorage'dan kaldır
+
+**Edge case:** SSR sırasında localStorage yok → `useEffect` içinde okumalısın, ilk render boş list.
 
 ## Kısıtlamalar (sıkı uy)
 
-- **`"use client"` directive'i koru** (interaktif bileşen)
-- Mevcut **state shape'i koru**: `Turn { role: "user" | "assistant", text, data? }`, `turns[]`, `input`, `busy`
-- Mevcut **API çağrısı koru**: `api.panelChat(message)` → `{ text, data }`
-- `RenderData` component'ini koru (data type'a göre `OrderListRender`, `SalesChart`, `StockOverviewRender` render eder) — bunu inline tut, ayrı dosyaya çıkarma
+- **`"use client"` directive'i koru**
+- **Backend kontratı değişmez**: `api.panelChat(message)` → `{ text, data }`
+- **Child component'ler değişmez**: `OrderListRender`, `SalesChart`, `StockOverviewRender` import'ları korunur
+- `RenderData` mevcut mantıkla devam — `data.type`'a göre child'ı seç
 - Sadece Tailwind classes kullan; **yeni paket ekleme**
-- `lucide-react` ikonları kullanabilirsin (zaten kurulu — örn. `Send, Sparkles, TrendingUp, Package, Users`)
-- Tüm metinler Türkçe
-- Tek dosya çıktı: `frontend/components/chat/ChatPanel.tsx` — drop-in replace
+- `lucide-react` ikonları kullanabilirsin (zaten kurulu — `MessageSquarePlus, Trash2, Send, Sparkles, TrendingUp, Package, Users, Zap, Clock` vb.)
+- Tüm UI metinleri Türkçe (Türkçe karakterleri tam kullan)
+- Tek dosya çıktı: `frontend/components/chat/ChatPanel.tsx`
 - **Açıklama yazma**, sadece kod blokunu döndür
 
-## Hedefler (öncelik sırasıyla)
+## Mevcut Sayfa Yapısı (referans)
 
-1. **Empty state**: şu an "Örnek: ..." tek satır var. Yerine:
-   - Üstte küçük welcome message (icon + selamlama)
-   - 4 adet **suggested prompt chip'i** (tıklanabilir, mesaj olarak gönderir)
-   - Önerilen prompt'lar (kategorize edilmiş ikon'larla):
-     - 📊 "Bu hafta satış grafiği" (sales_summary)
-     - 📦 "Düşük stoklar" (stock_overview)
-     - 👥 "Ayşe Yılmaz'ın son siparişi" (customer history)
-     - ⚡ "Bugün acil siparişler" (list_orders pending urgent)
-2. **Mesaj balonları daha business UX** havası — Telegram tarzı değil, Linear/Stripe Assistant tarzı:
-   - User mesajı: sağa hizalı, koyu nötr (mevcut `bg-slate-900 text-white` korunabilir ama radius/padding zarif)
-   - Assistant mesajı: sola hizalı, ince border, hafif shadow, **avatar/ikon yanında**
-   - Assistant balonu + data widget **entegre** (data balonun alt tarafına kart içinde, görsel akış kesmesin)
-3. **Loading indicator** "Düşünüyorum..." text yerine **3-dot pulsing** veya skeleton balon
-4. **Form alanı (input + buton)** sticky alta yapışsın, daha "compose box" hissi (Linear/ChatGPT'deki gibi):
-   - Input border kalın değil, focus'ta brand color
-   - Send butonu icon (Send from lucide) + text yan yana
-   - `Enter` ile gönder, `Shift+Enter` yeni satır (textarea'ya geçebilirsin ama auto-resize gerekirse single-line input kalabilir, kararı sen ver)
+`frontend/app/chat/page.tsx` (DEĞİŞMEYECEK):
+
+```tsx
+import { ChatPanel } from "@/components/chat/ChatPanel";
+
+export default function ChatPage() {
+  return (
+    <div className="max-w-4xl">
+      <header className="mb-4">
+        <h1 className="text-2xl font-bold">AI Asistan</h1>
+        <p className="text-slate-600 text-sm">Doğal dilde sor, sistem cevap üretsin.</p>
+      </header>
+      <ChatPanel />
+    </div>
+  );
+}
+```
+
+> **Önemli:** Page-level `max-w-4xl` constraint var — history sidebar bunu **kıracak**. Çözüm: `ChatPanel` kendi içinde `max-w-none` ile bu constraint'i override edebilir veya page.tsx'i de güncellemek için bir not düş. Tercihen **ChatPanel** içinde `-mx-{N}` veya `w-screen` trick'i ile sidebar full height kullansın.
+
+## Ana App Layout (referans)
+
+`frontend/app/layout.tsx` zaten 224px (`w-56`) sol sidebar içeriyor. Senin yeni history sidebar'ı bu **ana sidebar'ın hemen yanında** olacak — yani toplam iki dikey panel, ardından ana content.
+
+```
+| Ana App Sidebar (224px) | Chat History Sidebar (260px) | Chat Area (flex-1) |
+```
 
 ## Ürün Özeti
 
-**Ürün:** Küçük/orta ölçekli işletmeler için Telegram tabanlı müşteri asistanı + yönetim paneli.
+**Ürün:** KOBİ/kooperatif için Telegram tabanlı müşteri asistanı + yönetim paneli.
 
-**Kullanıcı:** 35-55 yaş işletme sahibi. Pazar akşamı paneli açıp "Bu hafta ne sattım?" sorgusu yapacak. AI Asistan, **SQL bilmeden veri sorgulamanın doğal yolu**.
-
-**Bu sayfa'nın yeri:** `/chat` route'unda full-page bileşen. Yan menüde "AI Asistan" link'i ile gelinir.
+**Kullanıcı:** 35-55 yaş işletme sahibi. Pazar akşamı paneli açıp "Bu hafta ne sattım?" sorgusu yapar. Sonraki Pazar tekrar açar — **geçmiş haftanın konuşmasını** görebilmek ister, karşılaştırma yapmak için.
 
 ## Tasarım Vizyonu
 
 Üç sıralı adjektif: **sakin, güvenilir, sıcak**.
 
-**Referanslar:** Linear Copilot, Stripe Assistant, Notion AI, ChatGPT. Hava: profesyonel ama davetkar.
+**Referanslar:** Claude.ai chat history sidebar, ChatGPT sidebar, Linear copilot. Hava: profesyonel ama davetkar.
 
-**Kaçınılacak:** Generic chatbot UI (büyük gradient header, bot mascot), Telegram clone, "ChatGPT klonu" hissi.
+**Kaçınılacak:** Gradient bombardımanı, mascot, bot avatar abartısı.
 
 ## Marka & Tonalite
 
 - Resmi dil, 2. tekil ("siz")
-- AI cevabı zaten backend'den geliyor (Türkçe, kibar) — sen sadece UI kalıbını tasarlıyorsun
-- Welcome message örnek: "Doğal dilde sorabilirsiniz. Sistemdeki tüm veriye erişimim var." (kısa, davet edici)
+- Welcome message örnek: "Doğal dilde sorabilirsiniz. Sistemdeki tüm veriye erişimim var."
+- "+ Yeni Sohbet" butonu metni: kısa, eylem odaklı
+- Boş history mesajı: "Henüz sohbet yok. İlk soruyu sorduğunuzda burada görünür."
 
 ## Renk Paleti (sabit)
 
 ```
 brand-50:  #ecfdf5
-brand-500: #10b981   ← suggested prompt chip border accent
-brand-600: #059669   ← send buton bg, focus ring
+brand-500: #10b981
+brand-600: #059669
 brand-700: #047857
 ```
 
 Yan tonlar: `slate-*` (nötr), `emerald-*` (success/accent).
 
-**Suggested prompt chip'leri** için pastel/soft renkler kullanabilirsin (`bg-emerald-50`, `bg-blue-50`, `bg-amber-50` gibi) — kategoriye göre farklı tonlar.
+**History sidebar:**
+- Arka plan: `bg-slate-50` (ana area `bg-slate-50` ile uyumlu, hafif ayrım için `border-r border-slate-200`)
+- Aktif sohbet: `bg-brand-50 text-brand-700 border-l-2 border-brand-500`
+- Hover: `hover:bg-slate-100`
+
+**Compact chip şeridi (input üstü):**
+- Açık pastel, `bg-slate-100 hover:bg-slate-200` veya kategoriye göre soft tonlar
 
 ## Tipografi
 
-- System UI stack
-- Mesaj metni: `text-sm` veya `text-[15px]` (okunabilir ama kompakt)
-- Suggested chip'ler: `text-sm font-medium`
-- Welcome message: `text-base`, biraz daha rahat satır aralığı
+- System UI
+- History title: `text-sm font-medium` (1 satır, `truncate`)
+- History timestamp: `text-xs text-slate-500`
+- Compact chip: `text-xs font-medium`
+- Welcome: `text-base`
 
-## Bu Sayfanın (AI Asistan) Detaylı Brief'i — Bölüm 8.6
+## Suggested Prompt Önerileri (DEĞİŞMEZ — empty state + compact şerit ikisinde aynı)
 
-**Mevcut sorunlar:**
-
-1. **Boş ekran çok çıplak** — sadece "örnek soru" hint var, kullanıcı ne sorabileceğini bilmez
-2. **Suggested prompts yok** (chip'ler gibi)
-3. Mesaj balonu Telegram tarzı ama daha business UX havası olabilir
-4. Render edilen tablo balonun **dışında** — görsel akış kesiliyor
-5. **Loading hali** sadece "Düşünüyorum..." metni — daha sofistike olmalı
-
-**İstenen iyileştirmeler:**
-
-- **Empty state**: 4 öneri chip'i, tıklanınca otomatik gönderir
-- **Tek-seferlik onboarding tooltip** (opsiyonel, atlanabilir) — "Doğal dilde sorabilirsiniz, sistem tüm veriye bakar"
-- **Asistan balonu + data widget entegre** — balon altında değil, balon **içinde** veya kart bütünleşik
-- **Streaming tarzı tipping indicator** (3-dot animasyon)
-
-## UX Akış (referans için)
-
-Pazar akşamı yönetici `/chat` açar:
-
-1. **Açılış**: Welcome message + 4 öneri chip'i görür
-2. "Bu hafta toplam ne sattım?" yazar → assistant cevap + sales chart
-3. "Hangi ürün öne çıktı?" → top products listesi
-4. "Ayşe Yılmaz bu hafta?" → müşteri detayı
-
-Bu akışta sohbet **kümülatif bilgi** birikir — kullanıcı scroll back yapıp önceki cevaplara bakabilmeli. Şu an history sayfayı yenileyince kayboluyor (kabul edilebilir, mevcut behavior'u koru).
-
-## Suggested Prompt Önerileri (öncelik)
-
-Welcome state'te 4 chip:
-
-| Chip | Prompt text (kullanıcı bunu görür) | API'ye gidecek mesaj | Beklenen tool |
-|------|--------------------------------------|------------------------|---------------|
+| Chip | Görünen text | Gönderilen mesaj | Beklenen tool |
+|------|--------------|------------------|---------------|
 | 📊 | Bu hafta satış grafiği | "Bu hafta günlük satış grafiğini göster" | sales_summary |
 | 📦 | Düşük stoklar | "Düşük stokta olan ürünleri listele" | stock_overview |
 | 👥 | Ayşe Yılmaz'ın son siparişleri | "Ayşe Yılmaz'ın son siparişlerini göster" | customer_order_history |
 | ⚡ | Bekleyen acil siparişler | "Bekleyen acil siparişleri listele" | list_orders |
 
-Chip'in `onClick` davranışı: `input` state'ine prompt text'ini set et + `send()` çağır (kullanıcı butona basmadan direkt gönder).
+**Chip click race condition uyarısı:** `setInput(text); send()` çağırırsan `send` eski state'i okur. Doğru pattern: `send(textParam)` doğrudan parametre alsın veya `setInput` sonrası `setTimeout(send, 0)` (idealden uzak), en temizi:
+
+```ts
+async function send(messageOverride?: string) {
+  const text = (messageOverride ?? input).trim();
+  if (!text || busy) return;
+  // ... rest using `text`
+}
+```
+
+## UX Akışı
+
+1. **İlk açılış (history boş):**
+   - Sol: ana app sidebar + history sidebar (boş, "Henüz sohbet yok")
+   - Sağ: welcome + 4 büyük chip kartı + compose box
+2. **İlk mesaj:**
+   - Welcome kaybolur, sohbet başlar
+   - History sidebar'da yeni satır görünür (title = mesajın ilk 40 char)
+   - Compact chip şeridi compose box üstünde görünür
+3. **Yeni sohbet butonu:**
+   - History listesinde aktif highlight kalkar
+   - Sağ alan empty state'e döner (welcome + 4 kart)
+4. **Sohbet geri çağırma:**
+   - Sidebar'da bir sohbete tık → o sohbetin tüm turns'ü yüklenir, scroll en alta
+   - Aktif highlight güncellenir
+5. **Sohbet silme:**
+   - Sidebar satırında `×` ikonuna hover → kırmızı tonu
+   - Tık → confirm → silinir
+   - Aktif sohbet silindiyse otomatik "yeni sohbet" moduna geç
 
 ## Responsive
 
-- **Desktop**: full width, max-w-4xl ortalanmış (üst sayfada layout zaten yapıyor)
-- **Tablet/mobil**: chip'ler 2x2 grid'e geçer, input bar sticky alt
+- **Desktop (>1280px):** 3 panel yan yana (ana sidebar, history, chat)
+- **Tablet (768-1280px):** History sidebar collapse'a girer — bir hamburger/clock ikonu ile aç-kapa olabilir
+- **Mobile:** History sidebar tamamen overlay (full screen modal), chat area full width
 
-## Erişibilirlik
+## Erişilebilirlik
 
-- `<form>` semantik, Enter ile submit
-- Loading sırasında `aria-busy="true"` mesaj listesinde
-- Suggested chip'ler `<button>` semantik, klavye ile gezilebilir
+- History satırları `<button>` semantik (klavye ile gezilebilir)
+- Aktif sohbet `aria-current="true"`
+- Silme butonu `aria-label="Sohbeti sil"`
+- Compact chip şeridi `role="toolbar"` veya semantic `<nav>` aria-label ile
+- Loading sırasında `aria-busy="true"`
 - Focus ring `ring-2 ring-brand-500`
-- Animasyonlar `prefers-reduced-motion` saygılı
+- `prefers-reduced-motion` saygılı
 
 ## Tech Kısıtlamaları
 
-- Next.js 14 App Router, **`"use client"` zorunlu** (state + interaktivite)
+- Next.js 14 App Router, **`"use client"` zorunlu**
 - Tailwind 3.4 — yeni paket ekleme
-- **Mevcut import paths**: `@/lib/api`, `./OrderListRender`, `./SalesChart`, `./StockOverviewRender`, `lucide-react`
+- localStorage kullanımı `useEffect` içinde (SSR güvenli)
+- `crypto.randomUUID()` SSR'da yok → client-only, sorun değil
+- Mevcut import paths: `@/lib/api`, `./OrderListRender`, `./SalesChart`, `./StockOverviewRender`, `lucide-react`
 
-## Backend Kontratı (değişmez)
+## Backend Kontratı (DEĞİŞMEZ)
 
 `api.panelChat(message)` döner:
 
@@ -155,23 +236,23 @@ Chip'in `onClick` davranışı: `input` state'ine prompt text'ini set et + `send
 }
 ```
 
-`RenderData` bunu `data.type`'a göre uygun child component'e geçirir. Bu mantığı koru.
+Backend'e history göndermek **gerekmiyor** — her mesaj stateless çağrılır. Conversation context UI tarafında turns array'inde tutulur, ama API isteği sadece o mesajı geçer.
 
-## Test Verisi
+> **Future-proof not:** `api.panelChat(message, history)` 2. parametre destekliyor ama şu an UI bunu kullanmıyor (boş bırakabilirsin). v2'de gerekmiyor.
 
-Demo'da gerçek mesajlaşma örneği:
+## Test Senaryoları
 
-```
-USER: "Bu hafta Ayşe Yılmaz'dan kaç sipariş geldi?"
-ASSISTANT: { text: "Ayşe Yılmaz bu hafta 3 sipariş verdi, toplam 420 TL.",
-             data: { type: "order_list", orders: [...] } }
-```
+Aşağıdaki adımlar tasarımcının kafasında çalışırken doğrulasın:
 
-Müşteri isimleri seed'de: Ayşe Yılmaz, Mehmet Kaya, Fatma Demir, Ahmet Şahin vs.
+1. **İlk yükleme:** localStorage temiz → history sidebar boş, sağda welcome + 4 kart
+2. **İlk soru:** "Bu hafta satış" yazılır → sidebar'da 1 sohbet, compact şerit görünür, chat alanı dolu
+3. **İkinci soru aynı conversation:** Compose'tan "Hangi ürün önde?" → aynı sohbet güncellenir, sidebar başlık değişmez
+4. **+ Yeni Sohbet:** Empty state'e döner, yeni soru yeni conversation yaratır → sidebar'da 2 satır
+5. **Sohbet 1'e dön:** Tıklanır → eski turns yüklenir
+6. **Sohbet sil:** × tıkla → confirm → satır gider
+7. **Sayfa refresh:** Tüm sohbetler hâlâ orda (localStorage)
 
----
-
-## Mevcut Kod (drop-in replace için referans)
+## Mevcut Kod (DEĞİŞTİRİLECEK kod — drop-in replace için)
 
 `frontend/components/chat/ChatPanel.tsx`:
 
@@ -222,65 +303,44 @@ export function ChatPanel() {
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
       <div className="flex-1 overflow-y-auto space-y-4 pb-4">
-        {turns.length === 0 && (
-          <div className="text-slate-500 text-sm">
-            Örnek: <em>&ldquo;Bu hafta Ayşe Yılmaz&apos;dan kaç sipariş geldi?&rdquo;</em>
-          </div>
-        )}
-        {turns.map((t, i) => (
-          <div key={i} className={t.role === "user" ? "text-right" : ""}>
-            <div
-              className={`inline-block max-w-[80%] rounded-lg px-4 py-2 text-sm ${
-                t.role === "user"
-                  ? "bg-slate-900 text-white"
-                  : "bg-white border border-slate-200"
-              }`}
-            >
-              {t.text}
-            </div>
-            {t.role === "assistant" && t.data && (
-              <div className="mt-2 max-w-[80%]">
-                <RenderData data={t.data} />
-              </div>
-            )}
-          </div>
-        ))}
-        {busy && <p className="text-sm text-slate-400">Düşünüyorum...</p>}
+        {/* ... existing UI ... */}
       </div>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          send();
-        }}
-        className="flex gap-2"
-      >
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Doğal dilde sor..."
-          className="flex-1 border border-slate-300 rounded px-3 py-2 text-sm"
-        />
-        <button
-          type="submit"
-          disabled={busy}
-          className="px-4 py-2 bg-brand-600 text-white rounded text-sm disabled:opacity-50"
-        >
-          Gönder
-        </button>
+      <form onSubmit={(e) => { e.preventDefault(); send(); }} className="flex gap-2">
+        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Doğal dilde sor..." className="..." />
+        <button type="submit" disabled={busy} className="...">Gönder</button>
       </form>
     </div>
   );
 }
 ```
 
-## Dependency Bileşenler (bilgi için — değiştirmeyeceksin)
+> Yukarıdaki kod **v1**; **mevcut dosya** zaten v1.5 (welcome + chip'ler ekli) — onu da göz önünde bulundur, ama tasarımcıya kafa karışıklığı yaratmamak için v1 referansı yeterli. Asıl önemli: state shape, API çağrısı, RenderData mantığı.
 
-`OrderListRender`, `SalesChart`, `StockOverviewRender` import edilen 3 child component, mevcut kalacak. Kontratları:
+## Dependency Bileşenler (DEĞİŞMEZ)
 
 - **OrderListRender** props: `{ data: { orders: [{order_id, customer_name, status, total, created_at}] } }`
-- **SalesChart** props: `{ data: { rows: [{day, revenue, order_count}] | [{product, revenue, quantity}], group_by: "day"|"product" } }`
+- **SalesChart** props: `{ data: { rows: [...], group_by: "day"|"product" } }`
 - **StockOverviewRender** props: `{ data: { products: [{id, name, stock, unit, is_low}] } }`
+
+## Bonus: Relative Time Helper
+
+Sidebar'da "2 saat önce" / "dün" formatı için inline helper yazabilirsin:
+
+```ts
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "az önce";
+  if (min < 60) return `${min} dk önce`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} saat önce`;
+  const day = Math.floor(hr / 24);
+  if (day === 1) return "dün";
+  if (day < 7) return `${day} gün önce`;
+  return new Date(iso).toLocaleDateString("tr-TR");
+}
+```
 
 ## Çıktı
 
-Sadece yeni `ChatPanel.tsx` dosyasının tam içeriği. Açıklama yazma, kod blok dışında metin verme.
+Sadece yeni `ChatPanel.tsx` dosyasının tam içeriği. Açıklama yazma, kod blok dışında metin verme. History sidebar inline component olarak aynı dosyada kalabilir veya küçük yardımcı component'ler aynı dosyada üstte tanımlanabilir — ihracat sadece `ChatPanel` named export.
