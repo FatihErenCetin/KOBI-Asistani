@@ -13,6 +13,8 @@
 
 **Demo gününe hazırlık adımları:** [docs/demo-setup.md](docs/demo-setup.md) (Gemini key, BotFather, ngrok, webhook, test verisi).
 
+**UI/UX tasarım brief'i (Claude Design / tasarımcıya verilecek):** [docs/ui-ux-brief.md](docs/ui-ux-brief.md).
+
 ## Mimari
 
 İki ajan (Customer / Panel) aynı **tool katmanını** farklı persona ve izinlerle kullanır:
