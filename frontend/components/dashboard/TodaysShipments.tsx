@@ -32,3 +32,4 @@ export function TodaysShipments({ rows }: { rows: Row[] }) {
     </section>
   );
 }
+
