@@ -3,12 +3,15 @@
 Tool seti dis taraftan Python fonksiyonlari + ToolSpec seklinde gecirilir.
 LLM dongusu max 5 iterasyon ile sinirli."""
 
+import asyncio
 import logging
+import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types
 
 from app.core.config import settings
@@ -16,6 +19,34 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 MAX_ITERATIONS = 5
+RATE_LIMIT_MAX_RETRIES = 3
+RATE_LIMIT_DEFAULT_WAIT = 12  # saniye, retry_delay parse edilemezse
+
+
+async def _generate_with_retry(client, *, model, contents, config):
+    """429 RESOURCE_EXHAUSTED yakalanirsa belirtilen sure kadar bekle ve tekrar dene."""
+    for attempt in range(RATE_LIMIT_MAX_RETRIES):
+        try:
+            return await client.aio.models.generate_content(
+                model=model, contents=contents, config=config
+            )
+        except genai_errors.ClientError as e:
+            if getattr(e, "code", None) != 429:
+                raise
+            wait_s = RATE_LIMIT_DEFAULT_WAIT
+            msg = str(e)
+            m = re.search(r"'?retryDelay'?\s*:\s*'?(\d+)", msg)
+            if m:
+                wait_s = min(int(m.group(1)) + 1, 60)
+            logger.warning(
+                "Gemini 429, attempt %d/%d, waiting %ds",
+                attempt + 1, RATE_LIMIT_MAX_RETRIES, wait_s,
+            )
+            await asyncio.sleep(wait_s)
+    # Tum retry'lar tukendi - bir kez daha dene, bu sefer hata propagate olsun
+    return await client.aio.models.generate_content(
+        model=model, contents=contents, config=config
+    )
 
 
 @dataclass
@@ -123,7 +154,8 @@ async def run_agent_loop(
     tool_calls_made: list[dict] = []
 
     for _ in range(MAX_ITERATIONS):
-        response = await client.aio.models.generate_content(
+        response = await _generate_with_retry(
+            client,
             model=settings.GEMINI_MODEL,
             contents=contents,
             config=config,
