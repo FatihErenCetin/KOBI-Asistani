@@ -9,7 +9,9 @@
 
 ## Demo
 
-5 senaryo (Senaryo 0 onboarding, 1 sipariş durumu, 2 ürün sorgu + inline buton ile sipariş, 3 geçmiş, 4 panel dashboard, 5 panel NL sorgu) — `docs/demo-scenarios.md`'de detay (henüz hazır değil; planlanmış).
+5 senaryo: Onboarding, sipariş durumu, ürün sorgu + inline buton ile sipariş, geçmiş, panel dashboard, panel NL sorgu.
+
+**Demo gününe hazırlık adımları:** [docs/demo-setup.md](docs/demo-setup.md) (Gemini key, BotFather, ngrok, webhook, test verisi).
 
 ## Mimari
 
