@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     DATABASE_TEST_URL: str = "postgresql+asyncpg://kobi:kobi@localhost:5432/kobi_test_db"
 
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MODEL: str = "gemini-flash-latest"
 
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_WEBHOOK_SECRET: str = "change_me"
