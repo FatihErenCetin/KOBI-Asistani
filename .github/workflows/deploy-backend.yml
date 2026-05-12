@@ -1,0 +1,76 @@
+name: Deploy Backend to VM
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'alembic/**'
+      - 'pyproject.toml'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Setup SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          VM_HOST: ${{ secrets.VM_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Deploy
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$VM_USER@$VM_HOST" 'bash -s' <<'REMOTE_SCRIPT'
+          set -euo pipefail
+
+          echo "==> Pull latest"
+          cd ~/KOBI-Asistani
+          git fetch origin main
+          git reset --hard origin/main
+
+          echo "==> Activate venv"
+          source .venv/bin/activate
+
+          echo "==> Install dependencies (only if changed)"
+          pip install -e . --quiet
+
+          echo "==> Apply migrations"
+          alembic upgrade head
+
+          echo "==> Restart backend"
+          sudo -n systemctl restart kobi-backend
+
+          echo "==> Wait for backend to come up"
+          sleep 4
+
+          echo "==> Health check"
+          for i in 1 2 3 4 5; do
+            if curl -fsS http://127.0.0.1:8000/health > /dev/null; then
+              echo "Backend healthy after $i attempt(s)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Backend health check FAILED"
+          sudo -n systemctl status kobi-backend --no-pager | tail -20
+          exit 1
+          REMOTE_SCRIPT
+
+      - name: Notify on failure
+        if: failure()
+        run: echo "::error::Deploy failed. Check log above and SSH to VM for details."
