@@ -1,7 +1,7 @@
 import enum
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Enum, Float, ForeignKey, String
+from sqlalchemy import BigInteger, Date, DateTime, Enum, Float, ForeignKey, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -29,7 +29,9 @@ class Customer(Base):
     __tablename__ = "customers"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    telegram_user_id: Mapped[int | None] = mapped_column(unique=True, nullable=True, index=True)
+    telegram_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, unique=True, nullable=True, index=True
+    )
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -108,7 +110,7 @@ class TelegramSession(Base):
     __tablename__ = "telegram_sessions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    telegram_user_id: Mapped[int] = mapped_column(unique=True, index=True)
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
     pending_intent: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
