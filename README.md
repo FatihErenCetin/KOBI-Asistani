@@ -15,6 +15,11 @@
 
 **UI/UX tasarım brief'i (Claude Design / tasarımcıya verilecek):** [docs/ui-ux-brief.md](docs/ui-ux-brief.md).
 
+**P0 bileşen redesign prompt'ları (kopyala-yapıştır hazır):**
+- [docs/prompts/summarycards.md](docs/prompts/summarycards.md) — Dashboard özet kartları
+- [docs/prompts/shipment-timeline.md](docs/prompts/shipment-timeline.md) — Sipariş detay kargo timeline
+- [docs/prompts/chat-empty-state.md](docs/prompts/chat-empty-state.md) — AI Asistan empty state + balon iyileştirme
+
 ## Mimari
 
 İki ajan (Customer / Panel) aynı **tool katmanını** farklı persona ve izinlerle kullanır:
