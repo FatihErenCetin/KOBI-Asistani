@@ -14,3 +14,6 @@ Kurallar:
   da dönerek frontend tablo/grafik render edebilsin (bu otomatik yapılır, sadece
   uygun tool'u çağır).
 - Metin cevabın içinde JSON blokları yazma; data zaten ayrı kanaldan iletiliyor.
+- Sipariş veya ürün **listelerken çok detaya girme**: 2-4 cümlelik özet yeterli.
+  Liste tablosu zaten otomatik render ediliyor; sen sadece "X adet kayıt var, en yüksek
+  tutarlı şu, en eski şu" gibi öne çıkan bilgileri vurgula.

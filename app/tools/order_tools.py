@@ -12,6 +12,7 @@ from app.tools.base import AgentContext
 
 
 def _format_order(order) -> dict:
+    """Full siparis verisi - tek bir siparisin detay sorgusu icin."""
     return {
         "order_id": order.id,
         "status": order.status.value,
@@ -29,6 +30,25 @@ def _format_order(order) -> dict:
             for item in order.items
         ],
         "shipment": _format_shipment(order.shipment) if order.shipment else None,
+        "customer_name": order.customer.name if order.customer else None,
+    }
+
+
+def _format_order_compact(order) -> dict:
+    """Liste sorgulari icin yalin format - items detayi yok, LLM payload'i kucuk."""
+    item_count = len(order.items)
+    top_product = order.items[0].product.name if order.items and order.items[0].product else None
+    return {
+        "order_id": order.id,
+        "status": order.status.value,
+        "total": float(order.total),
+        "created_at": order.created_at.isoformat(),
+        "promised_delivery": (
+            order.promised_delivery.isoformat() if order.promised_delivery else None
+        ),
+        "item_count": item_count,
+        "sample_product": top_product,
+        "shipment_status": order.shipment.status.value if order.shipment else None,
         "customer_name": order.customer.name if order.customer else None,
     }
 
@@ -58,9 +78,9 @@ async def list_my_recent_orders(*, days: int = 30, ctx: AgentContext) -> dict:
         return {"error": "Musteri kimligi belirsiz."}
     since = datetime.utcnow() - timedelta(days=days)
     orders = await orders_crud.list_orders(
-        ctx.db, customer_id=ctx.customer_id, since=since, limit=20
+        ctx.db, customer_id=ctx.customer_id, since=since, limit=10
     )
-    return {"count": len(orders), "orders": [_format_order(o) for o in orders]}
+    return {"count": len(orders), "orders": [_format_order_compact(o) for o in orders]}
 
 
 async def list_orders(
@@ -68,10 +88,10 @@ async def list_orders(
     status: str | None = None,
     since_days: int | None = None,
     customer_id: int | None = None,
-    limit: int = 20,
+    limit: int = 10,
     ctx: AgentContext,
 ) -> dict:
-    """Panel: tum siparisleri listeleme."""
+    """Panel: tum siparisleri listeleme (compact format)."""
     if not ctx.is_admin:
         return {"error": "Bu islem icin yetkiniz yok."}
     status_enum = OrderStatus(status) if status else None
@@ -79,7 +99,7 @@ async def list_orders(
     orders = await orders_crud.list_orders(
         ctx.db, status=status_enum, since=since, customer_id=customer_id, limit=limit
     )
-    return {"count": len(orders), "orders": [_format_order(o) for o in orders]}
+    return {"count": len(orders), "orders": [_format_order_compact(o) for o in orders]}
 
 
 async def get_order_detail(order_id: int, *, ctx: AgentContext) -> dict:
