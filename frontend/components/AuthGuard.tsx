@@ -10,6 +10,9 @@ const PUBLIC_PATHS = ["/login", "/register"];
 
 function isPublic(pathname: string | null): boolean {
   if (!pathname) return false;
+  // Landing page herkese açık; PUBLIC_PATHS startsWith eşleşmesi "/"'da
+  // tüm route'lara yayılacağı için exact match olarak ele alıyoruz.
+  if (pathname === "/") return true;
   return PUBLIC_PATHS.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`)
   );
