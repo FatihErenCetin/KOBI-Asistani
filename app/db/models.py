@@ -1,12 +1,36 @@
 import enum
 from datetime import date, datetime
 
-from sqlalchemy import BigInteger, Date, DateTime, Enum, Float, ForeignKey, String
+from sqlalchemy import (
+    BigInteger,
+    Date,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
     pass
+
+
+class StockMovementReason(str, enum.Enum):
+    PURCHASE = "purchase"
+    SALE = "sale"
+    ADJUSTMENT = "adjustment"
+    RETURN = "return"
+    WASTE = "waste"
+    INITIAL = "initial"
+
+
+class PriceHistoryField(str, enum.Enum):
+    PRICE = "price"
+    COST = "cost"
 
 
 class OrderStatus(str, enum.Enum):
@@ -47,9 +71,31 @@ class Product(Base):
     aliases: Mapped[str | None] = mapped_column(String(300), nullable=True)
     unit: Mapped[str] = mapped_column(String(10))
     price: Mapped[float] = mapped_column(Float)
+    cost: Mapped[float] = mapped_column(Float, default=0.0)
     stock: Mapped[float] = mapped_column(Float, default=0)
     low_stock_threshold: Mapped[float] = mapped_column(Float, default=0)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    barcode: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    category: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
+    is_active: Mapped[bool] = mapped_column(default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    supplier_links: Mapped[list["ProductSupplier"]] = relationship(
+        back_populates="product", cascade="all, delete-orphan"
+    )
+    price_history: Mapped[list["PriceHistory"]] = relationship(
+        back_populates="product",
+        cascade="all, delete-orphan",
+        order_by="PriceHistory.changed_at.desc()",
+    )
+    stock_movements: Mapped[list["StockMovement"]] = relationship(
+        back_populates="product",
+        cascade="all, delete-orphan",
+        order_by="StockMovement.created_at.desc()",
+    )
 
 
 class Order(Base):
@@ -118,6 +164,100 @@ class AdminUser(Base):
     name: Mapped[str] = mapped_column(String(100))
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Supplier(Base):
+    __tablename__ = "suppliers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), index=True)
+    contact_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    is_active: Mapped[bool] = mapped_column(default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    product_links: Mapped[list["ProductSupplier"]] = relationship(
+        back_populates="supplier", cascade="all, delete-orphan"
+    )
+
+
+class ProductSupplier(Base):
+    __tablename__ = "product_suppliers"
+    __table_args__ = (
+        UniqueConstraint("product_id", "supplier_id", name="uq_product_supplier"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
+    supplier_id: Mapped[int] = mapped_column(
+        ForeignKey("suppliers.id", ondelete="CASCADE"), index=True
+    )
+    supplier_sku: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    last_unit_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_purchase_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    lead_time_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_preferred: Mapped[bool] = mapped_column(default=False)
+    notes: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    product: Mapped["Product"] = relationship(back_populates="supplier_links")
+    supplier: Mapped["Supplier"] = relationship(back_populates="product_links")
+
+
+class PriceHistory(Base):
+    __tablename__ = "price_history"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
+    field: Mapped[PriceHistoryField] = mapped_column(
+        Enum(PriceHistoryField, name="price_history_field")
+    )
+    old_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    new_value: Mapped[float] = mapped_column(Float)
+    reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    changed_by_admin_id: Mapped[int | None] = mapped_column(
+        ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True
+    )
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, index=True
+    )
+
+    product: Mapped["Product"] = relationship(back_populates="price_history")
+
+
+class StockMovement(Base):
+    __tablename__ = "stock_movements"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
+    delta: Mapped[float] = mapped_column(Float)
+    reason: Mapped[StockMovementReason] = mapped_column(
+        Enum(StockMovementReason, name="stock_movement_reason")
+    )
+    reference_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    reference_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    note: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    balance_after: Mapped[float] = mapped_column(Float)
+    created_by_admin_id: Mapped[int | None] = mapped_column(
+        ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, index=True
+    )
+
+    product: Mapped["Product"] = relationship(back_populates="stock_movements")
 
 
 class TelegramSession(Base):
