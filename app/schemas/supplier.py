@@ -59,3 +59,16 @@ class ProductSupplierLinkOut(BaseModel):
     lead_time_days: int | None
     is_preferred: bool
     notes: str | None
+
+
+class SupplierProductRow(BaseModel):
+    """Tedarikci detay sayfasinda 'Bagli Urunler' tablosu."""
+
+    product_id: int
+    product_name: str
+    product_unit: str
+    supplier_sku: str | None
+    last_unit_cost: float | None
+    last_purchase_at: datetime | None
+    lead_time_days: int | None
+    is_preferred: bool

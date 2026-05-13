@@ -83,3 +83,14 @@ async def count_linked_products(db: AsyncSession, supplier_id: int) -> int:
         )
     )
     return int(res.scalar_one())
+
+
+async def list_products(db: AsyncSession, supplier_id: int) -> list[ProductSupplier]:
+    """Bagli urunler ve link payload'i (sku, lead_time, last_cost). Preferred onde."""
+    res = await db.execute(
+        select(ProductSupplier)
+        .where(ProductSupplier.supplier_id == supplier_id)
+        .options(selectinload(ProductSupplier.product))
+        .order_by(ProductSupplier.is_preferred.desc(), ProductSupplier.id)
+    )
+    return list(res.scalars())

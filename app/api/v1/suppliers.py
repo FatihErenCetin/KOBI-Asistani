@@ -3,7 +3,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, require_admin
 from app.db.crud import suppliers as suppliers_crud
-from app.schemas.supplier import SupplierCreate, SupplierOut, SupplierUpdate
+from app.schemas.supplier import (
+    SupplierCreate,
+    SupplierOut,
+    SupplierProductRow,
+    SupplierUpdate,
+)
 
 router = APIRouter(
     prefix="/suppliers", tags=["suppliers"], dependencies=[Depends(require_admin)]
@@ -74,3 +79,26 @@ async def delete_supplier(supplier_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Supplier not found")
     await suppliers_crud.soft_delete(db, s)
     await db.commit()
+
+
+@router.get("/{supplier_id}/products", response_model=list[SupplierProductRow])
+async def list_supplier_products(
+    supplier_id: int, db: AsyncSession = Depends(get_db)
+):
+    s = await suppliers_crud.get_by_id(db, supplier_id)
+    if s is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Supplier not found")
+    links = await suppliers_crud.list_products(db, supplier_id)
+    return [
+        SupplierProductRow(
+            product_id=link.product.id,
+            product_name=link.product.name,
+            product_unit=link.product.unit,
+            supplier_sku=link.supplier_sku,
+            last_unit_cost=link.last_unit_cost,
+            last_purchase_at=link.last_purchase_at,
+            lead_time_days=link.lead_time_days,
+            is_preferred=link.is_preferred,
+        )
+        for link in links
+    ]

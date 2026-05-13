@@ -145,6 +145,8 @@ export const api = {
   listSuppliers: (search?: string, include_inactive?: boolean) =>
     request<any[]>(`/suppliers${qs({ search, include_inactive })}`),
   getSupplier: (id: number) => request<any>(`/suppliers/${id}`),
+  supplierProducts: (id: number) =>
+    request<any[]>(`/suppliers/${id}/products`),
   createSupplier: (data: Record<string, any>) =>
     request<any>("/suppliers", { method: "POST", body: JSON.stringify(data) }),
   updateSupplier: (id: number, data: Record<string, any>) =>
