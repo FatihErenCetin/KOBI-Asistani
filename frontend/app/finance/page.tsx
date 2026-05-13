@@ -68,8 +68,8 @@ export default function FinancePage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
 
-  // Gün aralığını trend için aya çevir; min 2 ay (tek nokta trend olmaz)
-  const monthsForTrend = Math.max(2, Math.ceil(periodDays / 30));
+  // Gün aralığını trend için aya çevir (7→1, 30→1, 90→3, 180→6)
+  const monthsForTrend = Math.max(1, Math.ceil(periodDays / 30));
 
   const reload = useCallback(async () => {
     setLoading(true);
