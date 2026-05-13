@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   Calendar,
   LayoutDashboard,
+  MessageSquareWarning,
   ShoppingBag,
   ShoppingCart,
   Package,
@@ -26,6 +27,7 @@ const NAV = [
   { href: "/reorder", label: "Sipariş Önerileri", icon: ShoppingBag },
   { href: "/suppliers", label: "Tedarikçiler", icon: Truck },
   { href: "/customers", label: "Müşteriler", icon: Users },
+  { href: "/complaints", label: "Şikayet Riski", icon: MessageSquareWarning },
   { href: "/chat", label: "AI Asistan", icon: Sparkles },
 ];
 

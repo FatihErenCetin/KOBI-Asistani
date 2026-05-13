@@ -96,9 +96,43 @@ async def _process_contact(tg_user_id: int, phone: str, first_name: str):
         logger.exception("send_message failed in _process_contact")
 
 
+async def _check_complaint_risk(tg_user_id: int, customer_id: int | None, text: str):
+    """Fire-and-forget: regex tarsa LLM'ye sor, 0.7+ ise complaint kaydet."""
+    from app.db.crud import complaints as complaints_crud
+    from app.services import risk_classifier
+
+    try:
+        score, signals = await risk_classifier.classify_risk(text)
+        if score >= 0.7:
+            async with SessionLocal() as db:
+                await complaints_crud.create(
+                    db,
+                    customer_id=customer_id,
+                    telegram_user_id=tg_user_id,
+                    message_text=text,
+                    risk_score=score,
+                    signals=signals,
+                )
+                await db.commit()
+                logger.info(
+                    "Complaint logged: tg=%s score=%.2f signals=%s",
+                    tg_user_id, score, signals,
+                )
+    except Exception:
+        logger.exception("complaint risk check failed")
+
+
 async def _process_text(tg_user_id: int, text: str):
+    import asyncio
+
     async with SessionLocal() as db:
         customer = await identity.resolve_by_telegram(db, tg_user_id)
+        # Paralel: sikayet riski tara (fire-and-forget)
+        asyncio.create_task(
+            _check_complaint_risk(
+                tg_user_id, customer.id if customer else None, text
+            )
+        )
         if customer is None:
             try:
                 await telegram_client.send_message(

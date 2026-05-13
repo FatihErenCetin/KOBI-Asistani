@@ -335,6 +335,29 @@ class StockLot(Base):
     supplier: Mapped["Supplier | None"] = relationship()
 
 
+class CustomerComplaint(Base):
+    """Sikayet sinyali algilanmis musteri mesajlari.
+
+    Webhook handler her gelen mesaja paralel risk skoru hesaplar (regex onfiltre
+    + LLM); 0.7 ustu skor bu tabloya kayit duser.
+    """
+
+    __tablename__ = "customer_complaints"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    customer_id: Mapped[int | None] = mapped_column(
+        ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    telegram_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    message_text: Mapped[str] = mapped_column(String(2000))
+    risk_score: Mapped[float] = mapped_column(Float, index=True)
+    signals: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    resolved: Mapped[bool] = mapped_column(default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, index=True
+    )
+
+
 class TelegramSession(Base):
     """Telegram konusma state'i ve bekleyen siparis niyetleri."""
 

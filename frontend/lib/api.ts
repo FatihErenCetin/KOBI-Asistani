@@ -207,6 +207,11 @@ export const api = {
   expiringLots: (within_days = 14) =>
     request<any[]>(`/products/expiring?within_days=${within_days}`),
 
+  // Complaints
+  listComplaints: () => request<any[]>("/complaints"),
+  resolveComplaint: (id: number) =>
+    request<any>(`/complaints/${id}/resolve`, { method: "POST" }),
+
   // Reorder suggestions + draft mail
   reorderSuggestions: () => request<any[]>("/reorder/suggestions"),
   reorderDraftMail: (data: {
