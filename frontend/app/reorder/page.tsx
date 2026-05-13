@@ -21,6 +21,9 @@ interface Suggestion {
   lead_time_days: number | null;
   last_unit_cost: number | null;
   estimated_cost: number | null;
+  days_of_stock: number | null;
+  recommended_order_date: string | null;
+  urgency: "critical" | "warning" | "info";
 }
 
 export default function ReorderPage() {
@@ -104,6 +107,7 @@ export default function ReorderPage() {
             <th className="text-left px-4 py-2">Tedarikçi</th>
             <th className="text-right px-4 py-2">Lead Time</th>
             <th className="text-right px-4 py-2">Tahmini Maliyet</th>
+            <th className="text-left px-4 py-2">Tavsiye Tarih</th>
             <th className="text-right px-4 py-2"></th>
           </tr>
         </thead>
@@ -127,7 +131,11 @@ export default function ReorderPage() {
               <tr
                 key={r.product_id}
                 className={`border-t border-slate-100 ${
-                  r.current_stock === 0 ? "bg-rose-50" : ""
+                  r.urgency === "critical"
+                    ? "bg-rose-50"
+                    : r.urgency === "warning"
+                      ? "bg-amber-50"
+                      : ""
                 }`}
               >
                 <td className="px-4 py-2">
@@ -173,6 +181,25 @@ export default function ReorderPage() {
                 </td>
                 <td className="px-4 py-2 text-right">
                   {r.estimated_cost != null ? formatTRY(r.estimated_cost) : "—"}
+                </td>
+                <td className="px-4 py-2 text-xs">
+                  {r.recommended_order_date ? (
+                    <span
+                      className={`px-1.5 py-0.5 rounded ${
+                        r.urgency === "critical"
+                          ? "bg-rose-100 text-rose-700 font-medium"
+                          : r.urgency === "warning"
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-slate-100 text-slate-700"
+                      }`}
+                    >
+                      {r.urgency === "critical"
+                        ? "Acil bugün"
+                        : r.recommended_order_date}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
                 </td>
                 <td className="px-4 py-2 text-right">
                   {r.supplier_id && (

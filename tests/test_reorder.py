@@ -75,6 +75,20 @@ async def test_no_max_stock_uses_default_qty(db):
 
 
 @pytest.mark.asyncio
+async def test_urgency_critical_when_no_supplier_lead(db):
+    """Tedarikci yoksa veya stok cok az ise urgency=critical/warning."""
+    p = await products_crud.create(
+        db, name="UrgX", unit="kg", price=10, cost=5, low_stock_threshold=10,
+    )
+    # Stok 0, hiç satış yok, hiç tedarikçi yok
+    rows = await reorder_crud.suggestions(db)
+    target = next((r for r in rows if r["product_name"] == "UrgX"), None)
+    assert target is not None
+    assert target["urgency"] in ("warning", "critical")
+    assert target["recommended_order_date"] is not None
+
+
+@pytest.mark.asyncio
 async def test_endpoint(client, auth, db):
     p = await products_crud.create(
         db, name="Bal", unit="kg", price=100, cost=50, low_stock_threshold=10,

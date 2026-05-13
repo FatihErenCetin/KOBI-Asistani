@@ -1,8 +1,11 @@
 """Min/max stok seviyesine gore otomatik siparis onerileri."""
 
+from datetime import date, timedelta
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.crud import product_analytics as analytics_crud
 from app.db.crud import product_suppliers as ps_crud
 from app.db.models import Product
 
@@ -29,6 +32,35 @@ async def suggestions(db: AsyncSession) -> list[dict]:
             qty = max(p.max_stock - p.stock, 0)
         else:
             qty = max(p.low_stock_threshold * 2, p.low_stock_threshold)
+        # Lead-time tabanli oneri tarihi
+        anal = await analytics_crud.for_product(db, p)
+        days_of_stock = anal.get("days_of_stock")
+        lead_time = chosen.lead_time_days if chosen else None
+        recommended_date = None
+        urgency = "info"
+        if days_of_stock is None:
+            # Hiç satış yok — hemen sipariş ver (stok zaten min altı)
+            recommended_date = date.today().isoformat()
+            urgency = "warning"
+        elif lead_time is None:
+            recommended_date = date.today().isoformat()
+            urgency = "warning"
+        else:
+            days_until = days_of_stock - lead_time
+            if days_until <= 0:
+                recommended_date = date.today().isoformat()
+                urgency = "critical"
+            elif days_until <= 3:
+                recommended_date = (
+                    date.today() + timedelta(days=int(days_until))
+                ).isoformat()
+                urgency = "warning"
+            else:
+                recommended_date = (
+                    date.today() + timedelta(days=int(days_until))
+                ).isoformat()
+                urgency = "info"
+
         out.append(
             {
                 "product_id": p.id,
@@ -53,6 +85,9 @@ async def suggestions(db: AsyncSession) -> list[dict]:
                     if ((chosen and chosen.last_unit_cost) or p.cost)
                     else None
                 ),
+                "days_of_stock": days_of_stock,
+                "recommended_order_date": recommended_date,
+                "urgency": urgency,
             }
         )
     # Stoğu en az olanlar önce
