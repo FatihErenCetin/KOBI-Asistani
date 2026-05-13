@@ -11,7 +11,6 @@ import {
   MessageSquare,
   Mic,
   Package,
-  PlayCircle,
   Quote,
   Send,
   ShieldCheck,
@@ -21,6 +20,8 @@ import {
   TrendingUp,
   Truck,
 } from "lucide-react";
+
+import { VideoModalButton } from "@/components/landing/VideoModalButton";
 
 /* -------------------------------------------------------------------------- */
 /*  Mock data — sayfayı tek dosyada tutmak için inline                        */
@@ -356,16 +357,7 @@ function Hero() {
                 Ücretsiz Dene
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </Link>
-              <a
-                href="#tanitim"
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-base font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
-              >
-                <PlayCircle
-                  className="h-5 w-5 text-amber-600"
-                  aria-hidden="true"
-                />
-                30 saniyelik tanıtım
-              </a>
+              <VideoModalButton />
             </div>
 
             <p className="mt-5 text-sm text-slate-500">
