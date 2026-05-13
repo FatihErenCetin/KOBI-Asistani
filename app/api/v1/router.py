@@ -7,6 +7,7 @@ from app.api.v1 import (
     complaints,
     customers,
     dashboard,
+    lot_actions,
     mock_cargo,
     orders,
     products,
@@ -26,6 +27,7 @@ api_router.include_router(warehouses.router)
 api_router.include_router(reorder.router)
 api_router.include_router(complaints.router)
 api_router.include_router(admin_tools.router)
+api_router.include_router(lot_actions.router)
 api_router.include_router(customers.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(mock_cargo.router)

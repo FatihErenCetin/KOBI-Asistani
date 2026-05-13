@@ -306,6 +306,20 @@ class StockBalance(Base):
     warehouse: Mapped["Warehouse"] = relationship()
 
 
+class LotActionType(str, enum.Enum):
+    DISCOUNT = "discount"  # Indirim önerisi
+    BUNDLE = "bundle"  # Paket/promosyon
+    WASTE = "waste"  # Fire olarak işle
+    NOTIFY = "notify"  # Müşterilere bildirim
+    DELAY_REORDER = "delay_reorder"  # Yeni siparişi ertele
+
+
+class LotActionStatus(str, enum.Enum):
+    PENDING = "pending"
+    APPLIED = "applied"
+    DISMISSED = "dismissed"
+
+
 class StockLot(Base):
     """Lot/batch + son kullanma tarihi takibi.
 
@@ -337,6 +351,39 @@ class StockLot(Base):
     product: Mapped["Product"] = relationship()
     warehouse: Mapped["Warehouse"] = relationship()
     supplier: Mapped["Supplier | None"] = relationship()
+
+
+class LotAction(Base):
+    """SKT'si yaklasan lot icin AI advisor agent'inin uretdigi aksiyon onerileri.
+
+    Her oneri: konu + 2-3 cumlelik aciklama + onerilen indirim yuzdesi
+    (action_type=discount ise) + oncelik seviyesi (1=acil, 3=dusuk).
+    """
+
+    __tablename__ = "lot_actions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    lot_id: Mapped[int] = mapped_column(
+        ForeignKey("stock_lots.id", ondelete="CASCADE"), index=True
+    )
+    action_type: Mapped[LotActionType] = mapped_column(
+        Enum(LotActionType, name="lot_action_type")
+    )
+    subject: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(String(1500))
+    suggested_discount_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    priority: Mapped[int] = mapped_column(Integer, default=2)  # 1=acil, 3=düşük
+    status: Mapped[LotActionStatus] = mapped_column(
+        Enum(LotActionStatus, name="lot_action_status"),
+        default=LotActionStatus.PENDING,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, index=True
+    )
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    lot: Mapped["StockLot"] = relationship()
 
 
 class CustomerComplaint(Base):

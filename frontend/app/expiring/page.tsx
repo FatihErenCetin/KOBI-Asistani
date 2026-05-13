@@ -1,9 +1,19 @@
 "use client";
 
-import { AlertTriangle, Calendar, Database, Loader2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Bot,
+  Calendar,
+  Check,
+  Database,
+  Loader2,
+  Sparkles,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { Modal } from "@/components/ui/Modal";
 import { api } from "@/lib/api";
 
 interface ExpiringLot {
@@ -16,14 +26,92 @@ interface ExpiringLot {
   quantity: number;
 }
 
+interface LotActionItem {
+  id: number;
+  action_type: string;
+  subject: string;
+  description: string;
+  suggested_discount_pct: number | null;
+  priority: number;
+  status: string;
+}
+
+const ACTION_META: Record<string, { label: string; emoji: string; color: string }> = {
+  discount: { label: "İndirim", emoji: "🏷️", color: "bg-rose-100 text-rose-700" },
+  bundle: { label: "Paket", emoji: "📦", color: "bg-purple-100 text-purple-700" },
+  waste: { label: "Fire", emoji: "🗑️", color: "bg-slate-200 text-slate-700" },
+  notify: { label: "Bildirim", emoji: "📢", color: "bg-blue-100 text-blue-700" },
+  delay_reorder: {
+    label: "Siparişi Ertele",
+    emoji: "⏸️",
+    color: "bg-amber-100 text-amber-700",
+  },
+};
+
 export default function ExpiringPage() {
   const [rows, setRows] = useState<ExpiringLot[]>([]);
   const [days, setDays] = useState(14);
   const [enriching, setEnriching] = useState(false);
   const [enrichMsg, setEnrichMsg] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeMsg, setAnalyzeMsg] = useState<string | null>(null);
+  const [openLot, setOpenLot] = useState<ExpiringLot | null>(null);
+  const [lotActions, setLotActions] = useState<LotActionItem[]>([]);
+  const [actionsLoading, setActionsLoading] = useState(false);
 
   async function reload() {
     setRows(await api.expiringLots(days));
+  }
+
+  async function analyzeAll() {
+    setAnalyzing(true);
+    setAnalyzeMsg(null);
+    try {
+      const r = await api.analyzeExpiringLots(days);
+      if (r.actions_created === 0 && r.lots_skipped > 0) {
+        setAnalyzeMsg(
+          `Mevcut ${r.lots_skipped} lot için zaten öneri var. Yenisini görmek için satırdaki "AI Önerisi"ne tıkla.`,
+        );
+      } else {
+        setAnalyzeMsg(
+          `✓ ${r.lots_analyzed} lot için ${r.actions_created} öneri üretildi.${
+            r.lots_skipped > 0 ? ` (${r.lots_skipped} mevcuttu, atlandı)` : ""
+          }`,
+        );
+      }
+    } catch (e: any) {
+      setAnalyzeMsg(`Hata: ${e?.message ?? "analiz başarısız"}`);
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  async function openLotActions(lot: ExpiringLot) {
+    setOpenLot(lot);
+    setActionsLoading(true);
+    setLotActions([]);
+    try {
+      let actions = await api.lotActions(lot.lot_id);
+      // Hiç öneri yoksa üret
+      if (actions.length === 0) {
+        actions = await api.analyzeSingleLot(lot.lot_id);
+      }
+      setLotActions(actions);
+    } catch (e: any) {
+      setAnalyzeMsg(`Hata: ${e?.message}`);
+    } finally {
+      setActionsLoading(false);
+    }
+  }
+
+  async function applyAction(action_id: number) {
+    await api.applyLotAction(action_id);
+    if (openLot) await openLotActions(openLot);
+  }
+
+  async function dismissAction(action_id: number) {
+    await api.dismissLotAction(action_id);
+    if (openLot) await openLotActions(openLot);
   }
 
   useEffect(() => {
@@ -89,9 +177,22 @@ export default function ExpiringPage() {
             </button>
           ))}
           <button
+            onClick={analyzeAll}
+            disabled={analyzing}
+            className="ml-1 inline-flex items-center gap-1.5 px-3 py-1 text-sm rounded bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50"
+            title="Yaklaşan tüm lot'lar için AI öneri üret"
+          >
+            {analyzing ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="h-3.5 w-3.5" />
+            )}
+            AI ile Toplu Analiz
+          </button>
+          <button
             onClick={loadDemoData}
             disabled={enriching}
-            className="ml-1 inline-flex items-center gap-1.5 px-3 py-1 text-sm rounded border border-violet-300 text-violet-700 hover:bg-violet-50 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-1 text-sm rounded border border-violet-300 text-violet-700 hover:bg-violet-50 disabled:opacity-50"
             title="Eksik demo verisini yükle (depolar, lot'lar, dağılım)"
           >
             {enriching ? (
@@ -109,6 +210,11 @@ export default function ExpiringPage() {
           {enrichMsg}
         </p>
       )}
+      {analyzeMsg && (
+        <p className="text-sm bg-brand-50 border border-brand-200 text-brand-800 rounded px-3 py-2">
+          {analyzeMsg}
+        </p>
+      )}
 
       <table className="w-full bg-white border border-slate-200 rounded-lg overflow-hidden text-sm">
         <thead className="bg-slate-50 text-xs text-slate-600">
@@ -118,12 +224,13 @@ export default function ExpiringPage() {
             <th className="text-right px-4 py-2">Miktar</th>
             <th className="text-left px-4 py-2">SKT</th>
             <th className="text-right px-4 py-2">Kalan Gün</th>
+            <th className="text-right px-4 py-2">AI Önerisi</th>
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 && (
             <tr>
-              <td colSpan={5} className="text-center py-10">
+              <td colSpan={6} className="text-center py-10">
                 <div className="flex flex-col items-center gap-3 text-slate-500">
                   <Calendar className="h-10 w-10 text-slate-300" />
                   <p>Bu aralıkta süresi yaklaşan lot yok.</p>
@@ -168,10 +275,146 @@ export default function ExpiringPage() {
                   {r.days_left} gün
                 </span>
               </td>
+              <td className="px-4 py-2 text-right">
+                <button
+                  onClick={() => openLotActions(r)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded border border-brand-300 text-brand-700 hover:bg-brand-50"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  Öneri Al
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      <Modal
+        open={openLot !== null}
+        onClose={() => {
+          setOpenLot(null);
+          setLotActions([]);
+        }}
+        title={
+          openLot
+            ? `AI Önerileri: ${openLot.product_name} (${openLot.lot_number})`
+            : ""
+        }
+        size="lg"
+      >
+        {openLot && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 text-sm bg-slate-50 border border-slate-200 rounded px-3 py-2">
+              <span>
+                <strong>{openLot.quantity}</strong> {openLot.product_name.includes("Yumurta") ? "adet" : "kg"}{" "}
+                stokta
+              </span>
+              <span className="text-slate-400">·</span>
+              <span
+                className={`inline-flex items-center gap-1 font-medium ${
+                  openLot.days_left <= 3
+                    ? "text-rose-700"
+                    : openLot.days_left <= 7
+                      ? "text-amber-700"
+                      : "text-slate-700"
+                }`}
+              >
+                <Calendar className="h-3.5 w-3.5" />
+                {openLot.days_left} gün kaldı ({openLot.expiry_date})
+              </span>
+            </div>
+
+            {actionsLoading && (
+              <div className="flex items-center gap-2 text-sm text-slate-500 py-4">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                AI öneri üretiyor...
+              </div>
+            )}
+
+            {!actionsLoading && lotActions.length === 0 && (
+              <p className="text-sm text-slate-500">Öneri yok.</p>
+            )}
+
+            {!actionsLoading &&
+              lotActions.map((a) => {
+                const meta = ACTION_META[a.action_type] ?? {
+                  label: a.action_type,
+                  emoji: "•",
+                  color: "bg-slate-100 text-slate-700",
+                };
+                return (
+                  <div
+                    key={a.id}
+                    className={`border rounded-lg p-3 ${
+                      a.status === "applied"
+                        ? "border-emerald-300 bg-emerald-50"
+                        : a.status === "dismissed"
+                          ? "border-slate-200 bg-slate-50 opacity-60"
+                          : a.priority === 1
+                            ? "border-rose-300"
+                            : "border-slate-200"
+                    }`}
+                  >
+                    <header className="flex items-start justify-between gap-3 mb-1.5">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <Bot className="h-4 w-4 text-brand-600 shrink-0" />
+                        <h3 className="font-semibold text-slate-900 leading-snug">
+                          {a.subject}
+                        </h3>
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded ${meta.color}`}
+                        >
+                          {meta.emoji} {meta.label}
+                        </span>
+                        {a.priority === 1 && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">
+                            Acil
+                          </span>
+                        )}
+                      </div>
+                    </header>
+                    <p className="text-sm text-slate-700 leading-relaxed">
+                      {a.description}
+                    </p>
+                    {a.suggested_discount_pct != null && (
+                      <p className="text-xs text-rose-700 font-medium mt-1">
+                        Önerilen indirim: %{a.suggested_discount_pct}
+                      </p>
+                    )}
+                    {a.status === "pending" && (
+                      <footer className="flex gap-2 mt-2">
+                        <button
+                          onClick={() => applyAction(a.id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded bg-emerald-600 text-white hover:bg-emerald-700"
+                        >
+                          <Check className="h-3 w-3" /> Uygula
+                        </button>
+                        <button
+                          onClick={() => dismissAction(a.id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded border border-slate-300 hover:bg-slate-50"
+                        >
+                          <X className="h-3 w-3" /> Reddet
+                        </button>
+                      </footer>
+                    )}
+                    {a.status === "applied" && (
+                      <p className="text-xs text-emerald-700 mt-1.5">
+                        ✓ Uygulandı
+                      </p>
+                    )}
+                    {a.status === "dismissed" && (
+                      <p className="text-xs text-slate-500 mt-1.5">
+                        ✗ Reddedildi
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

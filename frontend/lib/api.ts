@@ -229,6 +229,24 @@ export const api = {
       products_split: number;
     }>("/admin/enrich-demo-data", { method: "POST" }),
 
+  // Lot actions (AI advisor)
+  analyzeExpiringLots: (within_days = 14) =>
+    request<{
+      lots_analyzed: number;
+      actions_created: number;
+      lots_skipped: number;
+    }>(`/lot-actions/analyze?within_days=${within_days}`, { method: "POST" }),
+  analyzeSingleLot: (lot_id: number, force = false) =>
+    request<any[]>(`/lot-actions/lots/${lot_id}/analyze?force=${force}`, {
+      method: "POST",
+    }),
+  lotActions: (lot_id: number) =>
+    request<any[]>(`/lot-actions/lots/${lot_id}`),
+  applyLotAction: (action_id: number) =>
+    request<any>(`/lot-actions/${action_id}/apply`, { method: "POST" }),
+  dismissLotAction: (action_id: number) =>
+    request<any>(`/lot-actions/${action_id}/dismiss`, { method: "POST" }),
+
   // Reorder suggestions + draft mail
   reorderSuggestions: () => request<any[]>("/reorder/suggestions"),
   reorderDraftMail: (data: {
