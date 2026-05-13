@@ -68,12 +68,15 @@ export default function FinancePage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
 
+  // Gün aralığını trend için aya çevir; min 2 ay (tek nokta trend olmaz)
+  const monthsForTrend = Math.max(2, Math.ceil(periodDays / 30));
+
   const reload = useCallback(async () => {
     setLoading(true);
     try {
       const [s, t, b, tp, ex] = await Promise.all([
         api.financeSummary(periodDays),
-        api.financeMonthlyTrend(6),
+        api.financeMonthlyTrend(monthsForTrend),
         api.financeCategoryBreakdown(periodDays),
         api.financeTopProducts(periodDays, 8),
         api.listExpenses({ since_days: periodDays, limit: 50 }),
@@ -86,7 +89,7 @@ export default function FinancePage() {
     } finally {
       setLoading(false);
     }
-  }, [periodDays]);
+  }, [periodDays, monthsForTrend]);
 
   useEffect(() => {
     reload();
@@ -174,7 +177,9 @@ export default function FinancePage() {
         <div className="lg:col-span-2 bg-white border border-slate-200 rounded-lg p-5">
           <header className="flex items-center gap-2 mb-3">
             <TrendingUp className="h-4 w-4 text-brand-600" />
-            <h2 className="font-semibold">Aylık Trend (6 ay)</h2>
+            <h2 className="font-semibold">
+              Aylık Trend ({monthsForTrend} ay)
+            </h2>
           </header>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
