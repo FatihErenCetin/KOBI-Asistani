@@ -124,10 +124,14 @@ function Sidebar() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isLogin = pathname === "/login" || pathname?.startsWith("/login/");
+  const isAuthRoute =
+    pathname === "/login" ||
+    pathname?.startsWith("/login/") ||
+    pathname === "/register" ||
+    pathname?.startsWith("/register/");
 
-  if (isLogin) {
-    // Login owns the full viewport — no sidebar, no chrome.
+  if (isAuthRoute) {
+    // Auth pages own the full viewport — no sidebar, no chrome.
     return <>{children}</>;
   }
 

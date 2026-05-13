@@ -13,7 +13,7 @@ from app.core.auth import (
 from app.core.config import settings
 from app.db.crud import admin_users as admin_crud
 from app.db.models import AdminUser
-from app.schemas.auth import LoginRequest, MeResponse, TokenResponse
+from app.schemas.auth import LoginRequest, MeResponse, RegisterRequest, TokenResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -74,6 +74,36 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
             status.HTTP_401_UNAUTHORIZED,
             "Email veya sifre hatali",
         )
+    token = create_access_token(subject=user.id, extra={"email": user.email})
+    return TokenResponse(
+        access_token=token,
+        expires_in=settings.JWT_EXPIRY_HOURS * 3600,
+        user=_user_response(user),
+    )
+
+
+@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    """Yeni admin kullanici olustur. Basarili olunca auto-login (JWT doner).
+
+    NOT (production icin): Bu endpoint su an acik. Hackathon demo'su icin.
+    Production'da:
+    - Admin-only register (Depends(get_current_admin) ekle)
+    - Veya invite token ile register
+    """
+    existing = await admin_crud.get_by_email(db, payload.email)
+    if existing is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Bu email zaten kayitli",
+        )
+    user = await admin_crud.create(
+        db,
+        email=payload.email,
+        password=payload.password,
+        name=payload.name.strip(),
+    )
+    await db.commit()
     token = create_access_token(subject=user.id, extra={"email": user.email})
     return TokenResponse(
         access_token=token,

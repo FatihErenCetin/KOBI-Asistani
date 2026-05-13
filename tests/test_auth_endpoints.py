@@ -137,3 +137,82 @@ async def test_protected_endpoint_rejects_bad_token(client):
         "/api/v1/dashboard/today", headers={"Authorization": "Bearer invalid"}
     )
     assert r.status_code in (401, 403)
+
+
+# ---------- Register endpoint ----------
+
+
+@pytest.mark.asyncio
+async def test_register_creates_user_and_returns_token(client):
+    r = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "new@example.com",
+            "password": "strongpass1",
+            "name": "Yeni Kullanici",
+        },
+    )
+    assert r.status_code == 201
+    data = r.json()
+    assert data["user"]["email"] == "new@example.com"
+    assert data["user"]["name"] == "Yeni Kullanici"
+    assert "access_token" in data
+
+
+@pytest.mark.asyncio
+async def test_register_duplicate_email_rejected(client, admin_user):
+    r = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "test@example.com",
+            "password": "anotherpass1",
+            "name": "Ikinci",
+        },
+    )
+    assert r.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_register_short_password_rejected(client):
+    r = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "short@example.com",
+            "password": "abc",
+            "name": "Short",
+        },
+    )
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_register_invalid_email_rejected(client):
+    r = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "not-an-email",
+            "password": "strongpass1",
+            "name": "Test",
+        },
+    )
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_register_then_login_works(client):
+    r1 = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "flow@example.com",
+            "password": "strongpass1",
+            "name": "Flow Test",
+        },
+    )
+    assert r1.status_code == 201
+
+    r2 = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "flow@example.com", "password": "strongpass1"},
+    )
+    assert r2.status_code == 200
+    assert r2.json()["user"]["email"] == "flow@example.com"

@@ -32,6 +32,7 @@ interface AuthContextValue {
   token: string | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -81,6 +82,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(data.user);
   }, []);
 
+  const register = useCallback(
+    async (email: string, password: string, name: string) => {
+      const resp = await fetch(`${API_BASE}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ email, password, name }),
+      });
+
+      if (!resp.ok) {
+        let message = "Kayıt sırasında bir hata oluştu";
+        try {
+          const body = await resp.json();
+          if (resp.status === 409) {
+            message = "Bu email zaten kayıtlı";
+          } else if (body?.detail) {
+            if (typeof body.detail === "string") {
+              message = body.detail;
+            } else if (Array.isArray(body.detail) && body.detail[0]?.msg) {
+              message = body.detail[0].msg;
+            }
+          }
+        } catch {
+          /* keep default */
+        }
+        throw new Error(message);
+      }
+
+      const data: LoginResponse = await resp.json();
+      setToken(data.access_token);
+      setStoredUser(data.user);
+      setTokenState(data.access_token);
+      setUser(data.user);
+    },
+    []
+  );
+
   const logout = useCallback(() => {
     clearAuth();
     setUser(null);
@@ -91,8 +129,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, token, isLoading, login, logout }),
-    [user, token, isLoading, login, logout]
+    () => ({ user, token, isLoading, login, register, logout }),
+    [user, token, isLoading, login, register, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

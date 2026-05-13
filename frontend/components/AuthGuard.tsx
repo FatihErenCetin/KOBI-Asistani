@@ -6,7 +6,7 @@ import { Loader2 } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
 
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/register"];
 
 function isPublic(pathname: string | null): boolean {
   if (!pathname) return false;
