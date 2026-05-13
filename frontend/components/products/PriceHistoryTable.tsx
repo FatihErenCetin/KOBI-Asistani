@@ -11,6 +11,7 @@ interface Row {
   new_value: number;
   reason: string | null;
   changed_at: string;
+  changed_by_admin_name: string | null;
 }
 
 export function PriceHistoryTable({ rows }: { rows: Row[] }) {
@@ -27,6 +28,7 @@ export function PriceHistoryTable({ rows }: { rows: Row[] }) {
           <th className="text-right py-1">Eski</th>
           <th className="text-right py-1">Yeni</th>
           <th className="text-left py-1 px-3">Sebep</th>
+          <th className="text-left py-1">Değiştiren</th>
           <th className="text-left py-1">Tarih</th>
         </tr>
       </thead>
@@ -62,6 +64,11 @@ export function PriceHistoryTable({ rows }: { rows: Row[] }) {
               </td>
               <td className="py-1.5 px-3 text-slate-600">
                 {r.reason ?? "—"}
+              </td>
+              <td className="py-1.5 text-xs text-slate-600">
+                {r.changed_by_admin_name ?? (
+                  <span className="text-slate-400">Sistem</span>
+                )}
               </td>
               <td className="py-1.5 text-slate-500 text-xs">
                 {formatDateTime(r.changed_at)}

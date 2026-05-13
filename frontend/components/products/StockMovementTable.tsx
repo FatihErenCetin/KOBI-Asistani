@@ -27,6 +27,7 @@ interface Row {
   note: string | null;
   balance_after: number;
   created_at: string;
+  created_by_admin_name: string | null;
 }
 
 export function StockMovementTable({ rows }: { rows: Row[] }) {
@@ -41,6 +42,7 @@ export function StockMovementTable({ rows }: { rows: Row[] }) {
           <th className="text-right py-1">Miktar</th>
           <th className="text-right py-1">Bakiye</th>
           <th className="text-left py-1 px-3">Not</th>
+          <th className="text-left py-1">Kullanıcı</th>
           <th className="text-left py-1">Tarih</th>
         </tr>
       </thead>
@@ -68,6 +70,11 @@ export function StockMovementTable({ rows }: { rows: Row[] }) {
               {r.balance_after}
             </td>
             <td className="py-1.5 px-3 text-slate-600">{r.note ?? "—"}</td>
+            <td className="py-1.5 text-xs text-slate-600">
+              {r.created_by_admin_name ?? (
+                <span className="text-slate-400">Sistem</span>
+              )}
+            </td>
             <td className="py-1.5 text-slate-500 text-xs">
               {formatDateTime(r.created_at)}
             </td>

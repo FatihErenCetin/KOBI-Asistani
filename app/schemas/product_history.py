@@ -11,6 +11,7 @@ class PriceHistoryRow(BaseModel):
     reason: str | None
     changed_at: datetime
     changed_by_admin_id: int | None
+    changed_by_admin_name: str | None = None
 
 
 class StockMovementRow(BaseModel):
@@ -23,6 +24,7 @@ class StockMovementRow(BaseModel):
     balance_after: float
     created_at: datetime
     created_by_admin_id: int | None
+    created_by_admin_name: str | None = None
 
 
 class SparklinePoint(BaseModel):

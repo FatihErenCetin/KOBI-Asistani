@@ -1,16 +1,49 @@
 from collections.abc import AsyncIterator
 
-from fastapi import Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthError, decode_access_token
 from app.core.config import settings
+from app.db.crud import admin_users as admin_crud
+from app.db.models import AdminUser
 from app.db.session import SessionLocal
 
 
 async def get_db() -> AsyncIterator[AsyncSession]:
     async with SessionLocal() as session:
         yield session
+
+
+async def get_current_admin_optional(
+    authorization: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> AdminUser | None:
+    """Audit icin admin kimligi tasiyici.
+
+    - JWT geçerli ise AdminUser nesnesi doner (audit imzasi alabilirsiniz).
+    - ADMIN_TOKEN legacy yolu ise None doner (kimlik bilinmiyor; audit'te null kalir).
+    - Geçersiz token ise None (require_admin zaten 401 ile kapida ret eder).
+
+    Bu dependency 401 ATMAZ — sadece kimlik tasiyici. Endpoint'te `require_admin`
+    ile birlikte kullanin: require_admin kapi bekcisi, bu kimlik gozlukleri.
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    token = authorization.removeprefix("Bearer ").strip()
+    if settings.ADMIN_TOKEN and token == settings.ADMIN_TOKEN:
+        return None
+    try:
+        payload = decode_access_token(token)
+        user_id = int(payload.get("sub", 0))
+    except (AuthError, ValueError, TypeError):
+        return None
+    if user_id <= 0:
+        return None
+    user = await admin_crud.get_by_id(db, user_id)
+    if user is None or not user.is_active:
+        return None
+    return user
 
 
 def require_admin(authorization: str | None = Header(default=None)) -> bool:

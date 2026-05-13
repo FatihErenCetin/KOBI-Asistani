@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, require_admin
+from app.api.deps import get_current_admin_optional, get_db, require_admin
 from app.db.crud import price_history as ph_crud
 from app.db.crud import product_analytics as analytics
 from app.db.crud import product_suppliers as ps_crud
 from app.db.crud import products as products_crud
 from app.db.crud import stock_movements as sm_crud
 from app.db.crud import suppliers as suppliers_crud
-from app.db.models import StockMovementReason
+from app.db.models import AdminUser, StockMovementReason
 from app.schemas.product import (
     ProductCreate,
     ProductOut,
@@ -103,8 +103,13 @@ async def list_products(
 
 
 @router.post("", response_model=ProductOutDetailed, status_code=status.HTTP_201_CREATED)
-async def create_product(payload: ProductCreate, db: AsyncSession = Depends(get_db)):
-    product = await products_crud.create(db, **payload.model_dump())
+async def create_product(
+    payload: ProductCreate,
+    db: AsyncSession = Depends(get_db),
+    current_admin: AdminUser | None = Depends(get_current_admin_optional),
+):
+    admin_id = current_admin.id if current_admin else None
+    product = await products_crud.create(db, **payload.model_dump(), admin_id=admin_id)
     await db.commit()
     return await _detailed(db, product.id)
 
@@ -119,11 +124,15 @@ async def update_product(
     product_id: int,
     payload: ProductUpdate,
     db: AsyncSession = Depends(get_db),
+    current_admin: AdminUser | None = Depends(get_current_admin_optional),
 ):
     p = await products_crud.get_by_id(db, product_id)
     if p is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Product not found")
-    await products_crud.update(db, p, **payload.model_dump(exclude_unset=True))
+    admin_id = current_admin.id if current_admin else None
+    await products_crud.update(
+        db, p, **payload.model_dump(exclude_unset=True), admin_id=admin_id
+    )
     await db.commit()
     return await _detailed(db, product_id)
 
@@ -142,11 +151,13 @@ async def update_stock_absolute(
     product_id: int,
     payload: StockUpdate,
     db: AsyncSession = Depends(get_db),
+    current_admin: AdminUser | None = Depends(get_current_admin_optional),
 ):
     p = await products_crud.get_by_id(db, product_id)
     if p is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Product not found")
-    await products_crud.set_stock(db, p, payload.stock)
+    admin_id = current_admin.id if current_admin else None
+    await products_crud.set_stock(db, p, payload.stock, admin_id=admin_id)
     await db.commit()
     return _to_out(p)
 
@@ -156,6 +167,7 @@ async def adjust_stock(
     product_id: int,
     payload: StockAdjust,
     db: AsyncSession = Depends(get_db),
+    current_admin: AdminUser | None = Depends(get_current_admin_optional),
 ):
     p = await products_crud.get_by_id(db, product_id)
     if p is None:
@@ -164,8 +176,9 @@ async def adjust_stock(
         reason = StockMovementReason(payload.reason)
     except ValueError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
+    admin_id = current_admin.id if current_admin else None
     await products_crud.adjust_stock(
-        db, p, payload.delta, reason=reason, note=payload.note
+        db, p, payload.delta, reason=reason, note=payload.note, admin_id=admin_id
     )
     await db.commit()
     return _to_out(p)
@@ -173,7 +186,7 @@ async def adjust_stock(
 
 @router.get("/{product_id}/price-history", response_model=list[PriceHistoryRow])
 async def get_price_history(product_id: int, db: AsyncSession = Depends(get_db)):
-    rows = await ph_crud.list_for_product(db, product_id)
+    rows = await ph_crud.list_for_product_with_admin(db, product_id)
     return [
         PriceHistoryRow(
             id=r.id,
@@ -183,14 +196,15 @@ async def get_price_history(product_id: int, db: AsyncSession = Depends(get_db))
             reason=r.reason,
             changed_at=r.changed_at,
             changed_by_admin_id=r.changed_by_admin_id,
+            changed_by_admin_name=admin_name,
         )
-        for r in rows
+        for r, admin_name in rows
     ]
 
 
 @router.get("/{product_id}/movements", response_model=list[StockMovementRow])
 async def get_movements(product_id: int, db: AsyncSession = Depends(get_db)):
-    rows = await sm_crud.list_for_product(db, product_id)
+    rows = await sm_crud.list_for_product_with_admin(db, product_id)
     return [
         StockMovementRow(
             id=r.id,
@@ -202,8 +216,9 @@ async def get_movements(product_id: int, db: AsyncSession = Depends(get_db)):
             balance_after=r.balance_after,
             created_at=r.created_at,
             created_by_admin_id=r.created_by_admin_id,
+            created_by_admin_name=admin_name,
         )
-        for r in rows
+        for r, admin_name in rows
     ]
 
 
