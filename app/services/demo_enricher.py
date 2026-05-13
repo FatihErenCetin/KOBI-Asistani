@@ -54,6 +54,7 @@ from app.db.seed import (
     MULTI_WAREHOUSE_SPLIT,
     NEARBY_PURCHASE_CATALOG,
     NEARBY_SHOP_CATALOG,
+    PRODUCT_CATALOG,
     SOCIAL_ACCOUNT_CATALOG,
     SOCIAL_POST_CATALOG,
     SUPPLIER_CATALOG,
@@ -314,6 +315,54 @@ COST_REASONS_DOWN = [
 
 # Sezonsal ürünler — fiyat dalgalanması daha yüksek
 SEASONAL_PRODUCTS = {"Domates", "Biber", "Salca"}
+
+
+async def ensure_product_costs(db: AsyncSession) -> dict:
+    """Cost = 0 olan ürünler için PRODUCT_CATALOG'tan eşleştirip maliyeti set et.
+
+    İsim eşleşmesi case-insensitive. Her güncellemede PriceHistory.COST
+    kaydı yazılır (eski 0 → yeni cost, "Demo veri zenginleştirici" reason'ı).
+
+    Bu fonksiyon ensure_price_history'den ÖNCE çalışmalı; aksi halde history
+    trajectory'si 0 base'den üretilir ve trend bozulur.
+    """
+    res = await db.execute(
+        select(Product).where(
+            (Product.cost == 0) | (Product.cost.is_(None))
+        )
+    )
+    targets = list(res.scalars())
+    if not targets:
+        return {"product_costs_updated": 0}
+
+    # Ad → cost mapping (lowercase key)
+    cost_map: dict[str, float] = {
+        name.lower(): float(cost)
+        for name, _, _, _, cost, *_ in PRODUCT_CATALOG
+        if cost and cost > 0
+    }
+
+    updated = 0
+    now = datetime.utcnow()
+    for p in targets:
+        target_cost = cost_map.get(p.name.lower())
+        if target_cost is None:
+            continue
+        old_cost = p.cost or 0.0
+        p.cost = target_cost
+        db.add(
+            PriceHistory(
+                product_id=p.id,
+                field=PriceHistoryField.COST,
+                old_value=old_cost,
+                new_value=target_cost,
+                reason="Demo veri zenginleştirici — maliyet doldurma",
+                changed_at=now,
+            )
+        )
+        updated += 1
+    await db.flush()
+    return {"product_costs_updated": updated}
 
 
 async def ensure_price_history(db: AsyncSession) -> dict:
@@ -1118,6 +1167,8 @@ async def enrich_all(db: AsyncSession) -> dict:
     result.update(await ensure_multi_warehouse(db))
     # Lot ekleme balance'lara bağlı, multi-warehouse'tan sonra çalışmalı
     result.update(await ensure_lots(db))
+    # Maliyet doldur — history'den ÖNCE çalışsın (trajectory baseline doğru olsun)
+    result.update(await ensure_product_costs(db))
     # Fiyat geçmişi — son
     result.update(await ensure_price_history(db))
     # Finansal mock data — son 6 ay giderler
