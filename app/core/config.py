@@ -20,6 +20,11 @@ class Settings(BaseSettings):
 
     ADMIN_TOKEN: str = "change_me"
 
+    # JWT for admin panel auth (login flow)
+    JWT_SECRET: str = "change_me_to_random_64_chars"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRY_HOURS: int = 24
+
     STT_ENABLED: bool = False
     STT_PROVIDER: str = "whisper"
 

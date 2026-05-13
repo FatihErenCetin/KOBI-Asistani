@@ -104,6 +104,22 @@ class Shipment(Base):
     order: Mapped["Order"] = relationship(back_populates="shipment")
 
 
+class AdminUser(Base):
+    """Web panel kullanicilari (isletme yoneticileri).
+
+    Musterilerden ayri model — Customer Telegram tarafi, AdminUser panel tarafi.
+    """
+
+    __tablename__ = "admin_users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(200))
+    name: Mapped[str] = mapped_column(String(100))
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class TelegramSession(Base):
     """Telegram konusma state'i ve bekleyen siparis niyetleri."""
 
