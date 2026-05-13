@@ -134,13 +134,19 @@ export default function ExpiringPage() {
       const parts: string[] = [];
       if (r.warehouses_created)
         parts.push(`${r.warehouses_created} yeni depo`);
+      if (r.suppliers_created)
+        parts.push(`${r.suppliers_created} tedarikçi`);
+      if (r.supplier_links_created)
+        parts.push(`${r.supplier_links_created} ürün-tedarikçi bağı`);
       if (r.products_split)
         parts.push(`${r.products_split} ürün çoklu depoya dağıtıldı`);
-      if (r.lots_created) parts.push(`${r.lots_created} lot oluşturuldu`);
+      if (r.lots_created) parts.push(`${r.lots_created} lot`);
+      if (r.price_history_rows_created)
+        parts.push(`${r.price_history_rows_created} fiyat geçmişi kaydı`);
       setEnrichMsg(
         parts.length === 0
           ? "✓ Tüm demo verileri zaten yüklü."
-          : `✓ ${parts.join(", ")}.`,
+          : `✓ ${parts.join(", ")} oluşturuldu.`,
       );
       reload();
     } catch (e: any) {

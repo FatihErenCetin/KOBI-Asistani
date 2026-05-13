@@ -111,3 +111,85 @@ async def test_enrich_endpoint_returns_summary(client, auth):
     assert "warehouses_created" in body
     assert "lots_created" in body
     assert "products_split" in body
+    assert "suppliers_created" in body
+    assert "supplier_links_created" in body
+    assert "price_history_rows_created" in body
+
+
+@pytest.mark.asyncio
+async def test_enrich_creates_suppliers(db):
+    """SUPPLIER_CATALOG'taki 5 tedarikçi eklenmeli."""
+    from sqlalchemy import select
+    from app.db.models import Supplier
+    from app.services.demo_enricher import enrich_all
+
+    before = list((await db.execute(select(Supplier))).scalars())
+    assert len(before) == 0
+    await enrich_all(db)
+    after = list((await db.execute(select(Supplier))).scalars())
+    assert len(after) == 5
+    names = {s.name for s in after}
+    assert "Anadolu Bal Kooperatifi" in names
+
+
+@pytest.mark.asyncio
+async def test_enrich_creates_product_supplier_links(db):
+    p = await products_crud.create(db, name="Bal", unit="kg", price=200, cost=120)
+    await enrich_all(db)
+    from sqlalchemy import select
+    from app.db.models import ProductSupplier
+
+    links = list(
+        (
+            await db.execute(
+                select(ProductSupplier).where(ProductSupplier.product_id == p.id)
+            )
+        ).scalars()
+    )
+    assert len(links) >= 1
+    # Bir tane preferred olmalı
+    assert any(l.is_preferred for l in links)
+
+
+@pytest.mark.asyncio
+async def test_enrich_creates_price_history(db):
+    """Her ürün için en az 3 PriceHistory satırı (PRICE field)."""
+    from sqlalchemy import func, select
+    from app.db.models import PriceHistory, PriceHistoryField
+
+    p = await products_crud.create(db, name="Bal", unit="kg", price=280, cost=180)
+    # 'Ilk olusturma' history zaten var, sayısını ölç
+    before_res = await db.execute(
+        select(func.count(PriceHistory.id)).where(
+            PriceHistory.product_id == p.id,
+            PriceHistory.field == PriceHistoryField.PRICE,
+        )
+    )
+    before = before_res.scalar_one()
+    await enrich_all(db)
+    after_res = await db.execute(
+        select(func.count(PriceHistory.id)).where(
+            PriceHistory.product_id == p.id,
+            PriceHistory.field == PriceHistoryField.PRICE,
+        )
+    )
+    after = after_res.scalar_one()
+    assert after >= before + 3  # en az 3 yeni adım
+
+
+@pytest.mark.asyncio
+async def test_price_history_idempotent(db):
+    """İkinci kez enrich çağrılınca yeni PRICE history eklenmemeli."""
+    from sqlalchemy import func, select
+    from app.db.models import PriceHistory
+
+    await products_crud.create(db, name="Bal", unit="kg", price=280, cost=180)
+    await enrich_all(db)
+    count1 = (
+        await db.execute(select(func.count(PriceHistory.id)))
+    ).scalar_one()
+    await enrich_all(db)
+    count2 = (
+        await db.execute(select(func.count(PriceHistory.id)))
+    ).scalar_one()
+    assert count2 == count1

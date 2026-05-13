@@ -227,6 +227,9 @@ export const api = {
       warehouses_created: number;
       lots_created: number;
       products_split: number;
+      suppliers_created: number;
+      supplier_links_created: number;
+      price_history_rows_created: number;
     }>("/admin/enrich-demo-data", { method: "POST" }),
 
   // Lot actions (AI advisor)
