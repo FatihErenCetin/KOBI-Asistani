@@ -18,16 +18,25 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.crud import stock_balances as sb_crud
+from app.db.crud import customers as customers_crud
+from app.db.crud import marketplace as mp_crud
+from app.db.crud import orders as orders_crud
 from app.db.models import (
     AdminUser,
+    Customer,
+    CustomerComplaint,
     Expense,
     ExpenseCategory,
     NearbyShop,
     NearbyShopPurchase,
+    Order,
+    OrderStatus,
     PriceHistory,
     PriceHistoryField,
     Product,
     ProductSupplier,
+    PurchaseOrder,
+    ShipmentStatus,
     SocialAccount,
     SocialPlatform,
     SocialPost,
@@ -40,6 +49,7 @@ from app.db.models import (
     Warehouse,
 )
 from app.db.seed import (
+    DEMO_CUSTOMERS,
     LOT_CATALOG,
     MULTI_WAREHOUSE_SPLIT,
     NEARBY_PURCHASE_CATALOG,
@@ -50,6 +60,7 @@ from app.db.seed import (
     SUPPLIER_META,
     WAREHOUSE_CATALOG,
 )
+from app.integrations import cargo_mock
 
 logger = logging.getLogger(__name__)
 
@@ -769,6 +780,331 @@ async def ensure_nearby_purchases(db: AsyncSession) -> dict:
     return {"nearby_purchases_created": created}
 
 
+async def ensure_demo_customers(db: AsyncSession) -> dict:
+    """DEMO_CUSTOMERS listesinden müşteri ekle. telegram_user_id unique."""
+    res = await db.execute(select(Customer.telegram_user_id))
+    existing_tg = {r[0] for r in res.all() if r[0] is not None}
+    created = 0
+    for name, tg_id, phone in DEMO_CUSTOMERS:
+        if tg_id in existing_tg:
+            continue
+        await customers_crud.create(
+            db, name=name, telegram_user_id=tg_id, phone=phone
+        )
+        created += 1
+    await db.flush()
+    return {"demo_customers_created": created}
+
+
+# Sipariş senaryoları:
+# Tarih ofseti, status, kalem sayısı (1-3), her kalem qty range
+# Bu listeden randomize'la 30+ sipariş üretilir (deterministik seed=2026)
+_ORDER_PATTERNS = [
+    # (days_ago_min, days_ago_max, status, n_items_min, n_items_max, qty_min, qty_max)
+    (0, 1, OrderStatus.PENDING, 1, 2, 1, 3),
+    (0, 1, OrderStatus.PENDING, 1, 2, 1, 3),
+    (0, 1, OrderStatus.PENDING, 1, 3, 1, 4),
+    (0, 2, OrderStatus.PENDING, 1, 2, 1, 3),
+    (1, 2, OrderStatus.PREPARED, 1, 3, 1, 3),
+    (1, 2, OrderStatus.PREPARED, 1, 2, 1, 4),
+    (1, 3, OrderStatus.PREPARED, 1, 2, 1, 3),
+    (2, 4, OrderStatus.SHIPPED, 1, 3, 1, 4),
+    (2, 5, OrderStatus.SHIPPED, 1, 3, 1, 3),
+    (3, 6, OrderStatus.SHIPPED, 1, 2, 1, 4),
+    (3, 7, OrderStatus.SHIPPED, 1, 3, 1, 5),
+    (4, 8, OrderStatus.SHIPPED, 1, 2, 1, 3),
+    (5, 12, OrderStatus.DELIVERED, 1, 3, 1, 5),
+    (6, 15, OrderStatus.DELIVERED, 1, 3, 1, 4),
+    (8, 20, OrderStatus.DELIVERED, 1, 2, 1, 5),
+    (10, 25, OrderStatus.DELIVERED, 1, 4, 1, 6),
+    (12, 28, OrderStatus.DELIVERED, 1, 3, 1, 5),
+    (15, 30, OrderStatus.DELIVERED, 1, 3, 1, 4),
+    (18, 35, OrderStatus.DELIVERED, 1, 2, 1, 5),
+    (20, 40, OrderStatus.DELIVERED, 1, 4, 1, 6),
+    (22, 45, OrderStatus.DELIVERED, 1, 3, 1, 5),
+    (25, 50, OrderStatus.DELIVERED, 1, 3, 1, 4),
+    (28, 55, OrderStatus.DELIVERED, 1, 2, 1, 5),
+    (30, 60, OrderStatus.DELIVERED, 1, 4, 1, 6),
+    # Bir iki iptal — gerçekçi spread
+    (5, 15, OrderStatus.CANCELLED, 1, 2, 1, 3),
+    (15, 30, OrderStatus.CANCELLED, 1, 2, 1, 2),
+]
+
+
+async def ensure_orders_history(db: AsyncSession) -> dict:
+    """Son ~60 günde 30+ örnek sipariş üret. Mevcut order varsa atla.
+
+    Akış:
+    1. Müşteri + ürün havuzunu çek
+    2. Her pattern için 1 sipariş üret (toplam ~26 örnek)
+    3. Status PENDING değilse promised_delivery + status ilgili shipment'i de oluştur
+    4. Bazı SHIPPED'leri rastgele IN_TRANSIT / OUT_FOR_DELIVERY'e ilerlet
+    """
+    count_res = await db.execute(select(func.count(Order.id)))
+    if int(count_res.scalar_one() or 0) > 0:
+        return {"orders_created": 0}
+
+    customers_res = await db.execute(select(Customer))
+    customers = list(customers_res.scalars())
+    if not customers:
+        return {"orders_created": 0}
+
+    products_res = await db.execute(
+        select(Product).where(Product.is_active.is_(True))
+    )
+    products = list(products_res.scalars())
+    if not products:
+        return {"orders_created": 0}
+
+    rng = random.Random(2026)
+    created = 0
+    cart_total_attempts_failed = 0
+    today = datetime.utcnow()
+
+    for pattern in _ORDER_PATTERNS:
+        d_min, d_max, status, n_min, n_max, q_min, q_max = pattern
+        days_ago = rng.randint(d_min, d_max)
+        order_date = today - timedelta(
+            days=days_ago, hours=rng.randint(0, 23), minutes=rng.randint(0, 59)
+        )
+        customer = rng.choice(customers)
+        n_items = rng.randint(n_min, n_max)
+        # Aynı ürün iki kere alınmasın
+        chosen_products = rng.sample(products, min(n_items, len(products)))
+        items: list[tuple[Product, float]] = []
+        for p in chosen_products:
+            qty = float(rng.randint(q_min, q_max))
+            items.append((p, qty))
+        if not items:
+            cart_total_attempts_failed += 1
+            continue
+        try:
+            order = await orders_crud.create_order(
+                db, customer_id=customer.id, items=items
+            )
+        except Exception:
+            cart_total_attempts_failed += 1
+            continue
+
+        # Geçmiş tarihe çek
+        order.created_at = order_date
+        order.status = status
+        # Promised delivery sadece SHIPPED/DELIVERED için anlamlı
+        if status in (OrderStatus.SHIPPED, OrderStatus.DELIVERED):
+            order.promised_delivery = (
+                order_date + timedelta(days=rng.randint(2, 5))
+            ).date()
+        # Shipment üret (SHIPPED veya DELIVERED ise)
+        if status in (OrderStatus.SHIPPED, OrderStatus.DELIVERED):
+            shipment = await cargo_mock.create_shipment(db, order)
+            shipment.last_event_at = order_date + timedelta(hours=rng.randint(2, 12))
+            if status == OrderStatus.DELIVERED:
+                shipment.status = ShipmentStatus.DELIVERED
+                shipment.current_location = "Teslim edildi"
+                shipment.estimated_delivery = (
+                    order_date + timedelta(days=rng.randint(1, 4))
+                ).date()
+            else:
+                # SHIPPED: rastgele bir transit aşaması
+                shipment.status = rng.choice(
+                    [
+                        ShipmentStatus.PICKED_UP,
+                        ShipmentStatus.IN_TRANSIT,
+                        ShipmentStatus.IN_TRANSIT,
+                        ShipmentStatus.OUT_FOR_DELIVERY,
+                    ]
+                )
+                shipment.estimated_delivery = (
+                    today + timedelta(days=rng.randint(0, 3))
+                ).date()
+        created += 1
+
+    await db.flush()
+    logger.info("Demo orders created: %d (failed %d)", created, cart_total_attempts_failed)
+    return {
+        "orders_created": created,
+        "orders_failed": cart_total_attempts_failed,
+    }
+
+
+# Örnek şikayet senaryoları — risk_score yüksek bazıları auto_generated
+_COMPLAINT_PATTERNS = [
+    # (subject, description, risk_score, source, signals_csv, auto_generated, resolved, days_ago)
+    (
+        "Kargo gecikme şikayeti — Ayşe Yılmaz",
+        "Müşteri 2 gün önce siparişini almasını beklediği halde hâlâ kargoda. Sipariş #12 hâlâ IN_TRANSIT durumunda.",
+        0.85,
+        "auto_risk_scan",
+        "kargo_gecikme,sla_asimi",
+        True,
+        False,
+        1,
+    ),
+    (
+        "Tekrarlayan şikayetçi müşteri",
+        "Hasan Polat son 30 günde 3 farklı siparişinde memnuniyetsizlik bildirdi. Tutma riski yüksek.",
+        0.75,
+        "auto_risk_scan",
+        "tekrar_sikayet,musteri_kaybi",
+        True,
+        False,
+        2,
+    ),
+    (
+        "Bal kavanozu kırık geldi",
+        "Müşteri kargoyu açtığında bal kavanozunun kırık olduğunu bildirdi. Telegram'dan resim de gönderdi.",
+        0.6,
+        "telegram_message",
+        "iade_talebi,hasar",
+        False,
+        True,
+        5,
+    ),
+    (
+        "Yanlış ürün gönderimi",
+        "Müşteri siparişinde çiçek balı istemişti, çam balı geldi. Değişim talep ediyor.",
+        0.55,
+        "telegram_message",
+        "yanlis_urun",
+        False,
+        True,
+        8,
+    ),
+    (
+        "Ödeme tamamlanmadı uyarısı",
+        "3 günden uzun süredir PENDING durumda kalan sipariş #5. Müşteri bağlantısı kopmuş olabilir.",
+        0.65,
+        "auto_risk_scan",
+        "odeme_eksik,pending_uzun",
+        True,
+        False,
+        3,
+    ),
+]
+
+
+async def ensure_demo_complaints(db: AsyncSession) -> dict:
+    """5 örnek şikayet — karışık auto + manuel + bazıları çözülmüş."""
+    count_res = await db.execute(select(func.count(CustomerComplaint.id)))
+    if int(count_res.scalar_one() or 0) > 0:
+        return {"demo_complaints_created": 0}
+
+    customers_res = await db.execute(select(Customer).limit(5))
+    customers = list(customers_res.scalars())
+    if not customers:
+        return {"demo_complaints_created": 0}
+
+    rng = random.Random(2027)
+    created = 0
+    today = datetime.utcnow()
+    for i, pattern in enumerate(_COMPLAINT_PATTERNS):
+        (
+            subject,
+            description,
+            risk_score,
+            source,
+            signals,
+            auto_generated,
+            resolved,
+            days_ago,
+        ) = pattern
+        customer = customers[i % len(customers)]
+        c = CustomerComplaint(
+            customer_id=customer.id,
+            telegram_user_id=customer.telegram_user_id,
+            subject=subject,
+            description=description,
+            message_text=description if source == "telegram_message" else None,
+            risk_score=risk_score,
+            signals=signals,
+            source=source,
+            auto_generated=auto_generated,
+            resolved=resolved,
+            created_at=today - timedelta(days=days_ago, hours=rng.randint(0, 12)),
+        )
+        db.add(c)
+        created += 1
+    await db.flush()
+    return {"demo_complaints_created": created}
+
+
+async def ensure_sample_purchase_orders(db: AsyncSession) -> dict:
+    """Marketplace 'Siparişlerim' sekmesi için 2-3 demo satınalma siparişi.
+
+    İdempotent: PurchaseOrder zaten varsa atlanır.
+    """
+    count_res = await db.execute(select(func.count(PurchaseOrder.id)))
+    if int(count_res.scalar_one() or 0) > 0:
+        return {"sample_purchase_orders_created": 0}
+
+    suppliers_res = await db.execute(select(Supplier).where(Supplier.is_active.is_(True)))
+    suppliers = {s.name: s for s in suppliers_res.scalars()}
+
+    products_res = await db.execute(select(Product).where(Product.is_active.is_(True)))
+    products = {p.name: p for p in products_res.scalars()}
+
+    samples = [
+        # (supplier_name, [(product_name, qty, unit_cost), ...], status, days_ago, ai_suggested, reason)
+        (
+            "Anadolu Bal Kooperatifi",
+            [("Bal", 8, 178)],
+            "received",
+            12,
+            False,
+            None,
+        ),
+        (
+            "Ege Zeytin A.S.",
+            [("Zeytinyagi", 12, 205)],
+            "sent",
+            3,
+            True,
+            "Aynı kargoyu kullanan 3 komşu KOBİ son 14 günde zeytinyağı aldı; "
+            "stoğumuz da yakın zamanda azalmaya başladı.",
+        ),
+        (
+            "Bursa Mandiracilik",
+            [("Peynir", 15, 152), ("Yogurt", 25, 36)],
+            "draft",
+            0,
+            False,
+            None,
+        ),
+    ]
+
+    created = 0
+    for supplier_name, items_def, status_str, days_ago, ai_suggested, reason in samples:
+        supplier = suppliers.get(supplier_name)
+        if supplier is None:
+            continue
+        items_tuple = []
+        for prod_name, qty, unit_cost in items_def:
+            p = products.get(prod_name)
+            if p is None:
+                continue
+            items_tuple.append((p.id, float(qty), float(unit_cost)))
+        if not items_tuple:
+            continue
+        po = await mp_crud.create_purchase_order(
+            db,
+            supplier_id=supplier.id,
+            items=items_tuple,
+            ai_suggested=ai_suggested,
+            suggestion_reason=reason,
+        )
+        # Backdate
+        po.created_at = datetime.utcnow() - timedelta(days=days_ago)
+        # Status set
+        if status_str == "received":
+            po.status = po.status.__class__("received")
+            po.received_at = datetime.utcnow() - timedelta(days=max(1, days_ago - 3))
+        elif status_str == "sent":
+            po.status = po.status.__class__("sent")
+        created += 1
+    await db.flush()
+    return {"sample_purchase_orders_created": created}
+
+
 async def enrich_all(db: AsyncSession) -> dict:
     """Tüm idempotent zenginleştirmeleri sırayla uygula."""
     result = {}
@@ -789,6 +1125,12 @@ async def enrich_all(db: AsyncSession) -> dict:
     # Sosyal medya — hesaplar + örnek postlar
     result.update(await ensure_social_accounts(db))
     result.update(await ensure_social_posts(db))
+    # Demo operasyonel veri: müşteri → sipariş → kargo → şikayet → satınalma
+    # Stok/lot enrich edildikten sonra çalışmalı (sipariş stoğu düşürür)
+    result.update(await ensure_demo_customers(db))
+    result.update(await ensure_orders_history(db))
+    result.update(await ensure_demo_complaints(db))
+    result.update(await ensure_sample_purchase_orders(db))
     await db.commit()
     logger.info("Demo enrichment complete: %s", result)
     return result

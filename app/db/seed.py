@@ -287,6 +287,23 @@ SOCIAL_POST_CATALOG = [
     ),
 ]
 
+# Demo müşteri seti (ad, telegram_user_id, telefon)
+DEMO_CUSTOMERS = [
+    ("Ayşe Yılmaz", 7700001001, "+905321110001"),
+    ("Mehmet Kaya", 7700001002, "+905321110002"),
+    ("Fatma Demir", 7700001003, "+905321110003"),
+    ("Ahmet Şahin", 7700001004, "+905321110004"),
+    ("Zeynep Çelik", 7700001005, "+905321110005"),
+    ("Mustafa Aydın", 7700001006, "+905321110006"),
+    ("Elif Özdemir", 7700001007, "+905321110007"),
+    ("Ali Arslan", 7700001008, "+905321110008"),
+    ("Hatice Doğan", 7700001009, None),
+    ("Hasan Polat", 7700001010, "+905321110010"),
+    ("Emine Koç", 7700001011, None),
+    ("Hüseyin Kurt", 7700001012, "+905321110012"),
+]
+
+
 CUSTOMER_NAMES = [
     "Ayse Yilmaz", "Mehmet Kaya", "Fatma Demir", "Ahmet Sahin", "Zeynep Celik",
     "Mustafa Aydin", "Elif Ozdemir", "Ali Arslan", "Hatice Dogan", "Hasan Polat",
