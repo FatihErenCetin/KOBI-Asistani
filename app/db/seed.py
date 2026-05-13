@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import delete, text
 
 from app.db.models import (
+    CustomerComplaint,
     Customer,
     Order,
     OrderItem,
@@ -17,9 +18,13 @@ from app.db.models import (
     ProductSupplier,
     Shipment,
     ShipmentStatus,
+    StockBalance,
+    StockLot,
     StockMovement,
+    StockMovementReason,
     Supplier,
     TelegramSession,
+    Warehouse,
 )
 from app.db.session import SessionLocal
 from app.integrations import cargo_mock
@@ -66,6 +71,75 @@ SUPPLIER_CATALOG = [
     ("Trabzon Findik Ltd.", "Fatma Hanim", "+905321110055", "info@trabzonfindik.example", "Trabzon"),
 ]
 
+# (name, code, address, is_default)
+WAREHOUSE_CATALOG = [
+    ("Ana Depo", "main", "Merkez işletme deposu", True),
+    ("Şube Depo", "shube", "Bağdat Caddesi şubesi", False),
+    ("Soğuk Hava Deposu", "cold", "Süt ürünleri ve sebze için (+4°C)", False),
+    ("Araç Stoğu", "vehicle", "Mobil dağıtım aracı", False),
+]
+
+# Multi-warehouse dağılım: (urun_adi, [(depo_kodu, oran), ...])
+# Toplam = 1.0 olmalı. Listelenmeyen ürünler tamamen Ana Depo'da kalır.
+MULTI_WAREHOUSE_SPLIT = [
+    # Süt ürünleri Soğuk Hava'da ağırlıklı
+    ("Peynir", [("cold", 0.7), ("main", 0.3)]),
+    ("Yogurt", [("cold", 0.8), ("main", 0.2)]),
+    ("Tereyagi", [("cold", 0.6), ("main", 0.4)]),
+    # Sebzeler 3 depoya dağılır (mağazada satılır + araç stoğu)
+    ("Domates", [("main", 0.5), ("shube", 0.3), ("vehicle", 0.2)]),
+    ("Biber", [("main", 0.5), ("shube", 0.3), ("vehicle", 0.2)]),
+    # Konsantre değerli ürünler şubede de stoklu
+    ("Bal", [("main", 0.7), ("shube", 0.3)]),
+    ("Zeytinyagi", [("main", 0.7), ("shube", 0.3)]),
+    ("Recel", [("main", 0.8), ("shube", 0.2)]),
+    # Yumurta da Soğuk Hava'ya gider
+    ("Yumurta", [("cold", 0.6), ("main", 0.4)]),
+]
+
+# Lot/batch: (urun_adi, lot_no, miktar_orani, skt_gun_offset, supplier_index)
+# skt_gun_offset: bugünden N gün sonra. Negatif = geçmiş (SKT geçmiş).
+# supplier_index: SUPPLIER_CATALOG sırasından (0..4), None = tedarikçi yok.
+# miktar_orani: o ürünün toplam stoğunun yüzdesi (toplam 1.0 olmalı ya da daha az).
+LOT_CATALOG = [
+    # Yoğurt — kritik kısa SKT (3 gün) → "yaklaşan SKT" demo
+    ("Yogurt", "YGT-2510-01", 0.6, 3, 3),
+    ("Yogurt", "YGT-2510-02", 0.4, 9, 3),
+    # Peynir — 5 gün SKT → yaklaşan
+    ("Peynir", "PYN-2510-A", 0.5, 5, 3),
+    ("Peynir", "PYN-2510-B", 0.5, 18, 3),
+    # Tereyağı — orta vadeli
+    ("Tereyagi", "TRY-2510-01", 1.0, 30, 3),
+    # Domates — çok kısa SKT (4 gün) demo etkisi
+    ("Domates", "DMT-2510-01", 1.0, 4, 2),
+    # Biber — 7 gün
+    ("Biber", "BBR-2510-01", 1.0, 7, 2),
+    # Yumurta — orta
+    ("Yumurta", "YMR-2510-01", 0.7, 14, 3),
+    ("Yumurta", "YMR-2510-02", 0.3, 25, 3),
+    # Bal — çok uzun
+    ("Bal", "BAL-2510-01", 1.0, 365, 0),
+    # Zeytinyağı — 2 lot, biri eski hasat
+    ("Zeytinyagi", "ZYT-2510-01", 0.6, 240, 1),
+    ("Zeytinyagi", "ZYT-2502-02", 0.4, 120, 1),
+    # Reçel — uzun
+    ("Recel", "RCL-2510-01", 1.0, 270, 0),
+    # Salça
+    ("Salca", "SLC-2510-01", 1.0, 180, 2),
+    # Tarhana
+    ("Tarhana", "TRH-2510-01", 1.0, 365, 2),
+    # Bulgur — 2 yıl
+    ("Bulgur", "BLG-2510-01", 1.0, 730, 2),
+    # Un
+    ("Un", "UN-2510-01", 1.0, 180, 2),
+    # Mercimek
+    ("Mercimek", "MRC-2510-01", 1.0, 540, 2),
+    # Findık
+    ("Findik", "FND-2510-01", 1.0, 365, 4),
+    # Pekmez
+    ("Pekmez", "PKM-2510-01", 1.0, 365, 0),
+]
+
 CUSTOMER_NAMES = [
     "Ayse Yilmaz", "Mehmet Kaya", "Fatma Demir", "Ahmet Sahin", "Zeynep Celik",
     "Mustafa Aydin", "Elif Ozdemir", "Ali Arslan", "Hatice Dogan", "Hasan Polat",
@@ -84,6 +158,9 @@ random.seed(42)
 
 async def clear_all(db) -> None:
     for model in [
+        CustomerComplaint,
+        StockLot,
+        StockBalance,
         StockMovement,
         PriceHistory,
         ProductSupplier,
@@ -94,6 +171,7 @@ async def clear_all(db) -> None:
         Product,
         Customer,
         TelegramSession,
+        Warehouse,
     ]:
         await db.execute(delete(model))
     await db.commit()
@@ -291,39 +369,148 @@ async def apply_demo_fixtures(db, customers: list[Customer], products: list[Prod
     )
 
 
-async def seed_initial_stock_movements(db, products: list[Product]):
-    """Her urun icin acilis stogu hareketi yazar."""
-    from app.db.models import StockMovement, StockMovementReason
+async def seed_warehouses(db) -> list[Warehouse]:
+    """Tüm depoları idempotent oluşturur. Migration zamanı 'main' oluşturulmuş
+    olabilir; mevcut kodu yeniden eklemeyiz."""
+    from sqlalchemy import select
+
+    existing_res = await db.execute(select(Warehouse))
+    existing = {w.code: w for w in existing_res.scalars()}
+
+    out: list[Warehouse] = []
+    for name, code, address, is_default in WAREHOUSE_CATALOG:
+        if code in existing:
+            out.append(existing[code])
+            continue
+        w = Warehouse(
+            name=name,
+            code=code,
+            address=address,
+            is_default=is_default,
+            is_active=True,
+        )
+        db.add(w)
+        out.append(w)
+    await db.flush()
+    return out
+
+
+async def seed_warehouse_balances(
+    db, products: list[Product], warehouses: list[Warehouse]
+):
+    """Açılış stoğunu Multi-warehouse dağılımına göre StockBalance'lara yaz +
+    her dağılım için StockMovement(INITIAL) yazar.
+
+    Bu, products v2 sonrası seed'in stok kaynağıdır. Product.stock cache de
+    burada güncellenir (toplam = SUM(balances)).
+    """
+    code_to_id = {w.code: w.id for w in warehouses}
+    default_id = next(w.id for w in warehouses if w.is_default)
+
+    splits_by_name = {name: split for name, split in MULTI_WAREHOUSE_SPLIT}
 
     for p in products:
-        if p.stock > 0:
+        if p.stock <= 0:
+            continue
+        total_stock = p.stock
+        # Tüm balance ve movement'leri sıfırlayalım — Product.stock cache hata olmasın
+        p.stock = 0
+        split = splits_by_name.get(p.name, [("main", 1.0)])
+        for code, ratio in split:
+            wh_id = code_to_id.get(code, default_id)
+            qty = round(total_stock * ratio, 2)
+            if qty <= 0:
+                continue
+            db.add(
+                StockBalance(
+                    product_id=p.id,
+                    warehouse_id=wh_id,
+                    quantity=qty,
+                )
+            )
+            p.stock += qty
             db.add(
                 StockMovement(
                     product_id=p.id,
-                    delta=p.stock,
+                    warehouse_id=wh_id,
+                    delta=qty,
                     reason=StockMovementReason.INITIAL,
-                    balance_after=p.stock,
-                    note="Seed acilis stogu",
+                    balance_after=qty,
+                    note="Seed açılış stoğu",
                 )
             )
     await db.flush()
+
+
+async def seed_stock_lots(
+    db, products: list[Product], suppliers: list[Supplier], warehouses: list[Warehouse]
+):
+    """Belirli ürünler için lot + SKT kayıtları. Lot eklendiği anda stok hareketi YAZMAZ —
+    seed_warehouse_balances zaten initial stok yazdı; lot'lar onu temsil eder.
+
+    Lot quantity'leri, ürünün toplam stoğunun ratio×stock olarak hesaplanır ve
+    o ürün için "hangi depodaysa orada" yazılır (ana depo öncelikli).
+    """
+    code_to_id = {w.code: w.id for w in warehouses}
+    default_id = next(w.id for w in warehouses if w.is_default)
+    splits_by_name = {name: split for name, split in MULTI_WAREHOUSE_SPLIT}
+    products_by_name = {p.name: p for p in products}
+
+    for lot_def in LOT_CATALOG:
+        product_name, lot_no, ratio, skt_offset, sup_idx = lot_def
+        p = products_by_name.get(product_name)
+        if p is None:
+            continue
+        # Lot'u o ürünün hangi depoda en çok varsa oraya yerleştir
+        split = splits_by_name.get(product_name, [("main", 1.0)])
+        primary_code = max(split, key=lambda s: s[1])[0]
+        wh_id = code_to_id.get(primary_code, default_id)
+        lot_qty = round(p.stock * ratio, 2)
+        if lot_qty <= 0:
+            continue
+        expiry = date.today() + timedelta(days=skt_offset)
+        supplier = suppliers[sup_idx] if sup_idx is not None and sup_idx < len(suppliers) else None
+        db.add(
+            StockLot(
+                product_id=p.id,
+                warehouse_id=wh_id,
+                lot_number=lot_no,
+                quantity=lot_qty,
+                expiry_date=expiry,
+                supplier_id=supplier.id if supplier else None,
+                received_at=datetime.utcnow() - timedelta(days=random.randint(2, 20)),
+                note=None,
+            )
+        )
+    await db.flush()
+
+
+async def seed_initial_stock_movements(db, products: list[Product]):
+    """Eski seed yolu — artık seed_warehouse_balances kullanılıyor. Geri uyum için bırakıldı."""
+    return
 
 
 async def run(demo_fixtures: bool, clear: bool):
     async with SessionLocal() as db:
         if clear:
             await clear_all(db)
+        warehouses = await seed_warehouses(db)
         products = await seed_products(db)
-        await seed_suppliers(db, products)
+        suppliers = await seed_suppliers(db, products)
         customers = await seed_customers(db)
+        # Çoklu depo dağılımı + initial stok hareketleri (Product.stock cache senkron)
+        await seed_warehouse_balances(db, products, warehouses)
+        # Lot/batch (SKT'li)
+        await seed_stock_lots(db, products, suppliers, warehouses)
         await seed_orders(db, customers, products, total=200)
         if demo_fixtures:
             await apply_demo_fixtures(db, customers, products)
-        await seed_initial_stock_movements(db, products)
         await db.commit()
     print(
-        f"Seed complete: {len(PRODUCT_CATALOG)} products, "
+        f"Seed complete: {len(WAREHOUSE_CATALOG)} warehouses, "
+        f"{len(PRODUCT_CATALOG)} products, "
         f"{len(SUPPLIER_CATALOG)} suppliers, "
+        f"{len(LOT_CATALOG)} lots, "
         f"{len(CUSTOMER_NAMES)} customers, 200+ orders"
     )
     if demo_fixtures:

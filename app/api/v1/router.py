@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    admin_tools,
     auth,
     chat,
     complaints,
@@ -24,6 +25,7 @@ api_router.include_router(suppliers.router)
 api_router.include_router(warehouses.router)
 api_router.include_router(reorder.router)
 api_router.include_router(complaints.router)
+api_router.include_router(admin_tools.router)
 api_router.include_router(customers.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(mock_cargo.router)
