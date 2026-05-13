@@ -15,6 +15,7 @@ class ProductOut(BaseModel):
     cost: float = 0
     stock: float
     low_stock_threshold: float
+    max_stock: float | None = None
     description: str | None
     barcode: str | None = None
     category: str | None = None
@@ -34,6 +35,7 @@ class ProductCreate(BaseModel):
     cost: float = 0
     stock: float = 0
     low_stock_threshold: float = 0
+    max_stock: float | None = None
     aliases: str | None = None
     description: str | None = None
     barcode: str | None = None
@@ -46,6 +48,7 @@ class ProductUpdate(BaseModel):
     price: float | None = None
     cost: float | None = None
     low_stock_threshold: float | None = None
+    max_stock: float | None = None
     aliases: str | None = None
     description: str | None = None
     barcode: str | None = None

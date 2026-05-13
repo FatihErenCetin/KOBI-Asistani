@@ -8,6 +8,7 @@ from app.api.v1 import (
     mock_cargo,
     orders,
     products,
+    reorder,
     suppliers,
     warehouses,
     webhooks,
@@ -20,6 +21,7 @@ api_router.include_router(orders.router)
 api_router.include_router(products.router)
 api_router.include_router(suppliers.router)
 api_router.include_router(warehouses.router)
+api_router.include_router(reorder.router)
 api_router.include_router(customers.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(mock_cargo.router)

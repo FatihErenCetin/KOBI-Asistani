@@ -111,6 +111,7 @@ async def create(
     cost: float = 0.0,
     stock: float = 0.0,
     low_stock_threshold: float = 0.0,
+    max_stock: float | None = None,
     aliases: str | None = None,
     description: str | None = None,
     barcode: str | None = None,
@@ -124,6 +125,7 @@ async def create(
         cost=cost,
         stock=0,
         low_stock_threshold=low_stock_threshold,
+        max_stock=max_stock,
         aliases=aliases,
         description=description,
         barcode=barcode,
@@ -175,6 +177,7 @@ async def update(
     price: float | None = None,
     cost: float | None = None,
     low_stock_threshold: float | None = None,
+    max_stock: float | None = None,
     aliases: str | None = None,
     description: str | None = None,
     barcode: str | None = None,
@@ -188,6 +191,8 @@ async def update(
         product.unit = unit
     if low_stock_threshold is not None:
         product.low_stock_threshold = low_stock_threshold
+    if max_stock is not None:
+        product.max_stock = max_stock
     if aliases is not None:
         product.aliases = aliases
     if description is not None:

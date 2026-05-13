@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   Calendar,
   LayoutDashboard,
+  ShoppingBag,
   ShoppingCart,
   Package,
   Users,
@@ -22,6 +23,7 @@ const NAV = [
   { href: "/products", label: "Ürünler", icon: Package },
   { href: "/warehouses", label: "Depolar", icon: Warehouse },
   { href: "/expiring", label: "Son Kullanma", icon: Calendar },
+  { href: "/reorder", label: "Sipariş Önerileri", icon: ShoppingBag },
   { href: "/suppliers", label: "Tedarikçiler", icon: Truck },
   { href: "/customers", label: "Müşteriler", icon: Users },
   { href: "/chat", label: "AI Asistan", icon: Sparkles },

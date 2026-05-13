@@ -74,6 +74,7 @@ class Product(Base):
     cost: Mapped[float] = mapped_column(Float, default=0.0)
     stock: Mapped[float] = mapped_column(Float, default=0)
     low_stock_threshold: Mapped[float] = mapped_column(Float, default=0)
+    max_stock: Mapped[float | None] = mapped_column(Float, nullable=True)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     barcode: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     category: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
