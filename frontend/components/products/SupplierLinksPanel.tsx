@@ -1,8 +1,8 @@
 "use client";
 
-import { Plus, Star, Trash2 } from "lucide-react";
+import { Plus, Star, Trash2, Trophy, Zap } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Modal } from "@/components/ui/Modal";
 import { api } from "@/lib/api";
@@ -51,6 +51,30 @@ export function SupplierLinksPanel({ productId }: { productId: number }) {
     const rows = await api.productSupplierLinks(productId);
     setLinks(rows);
   }
+
+  // Compare: hangi link en ucuz / en hızlı?
+  const winners = useMemo(() => {
+    const cheapest = links
+      .filter((l) => l.last_unit_cost != null)
+      .reduce<SupplierLink | null>(
+        (best, cur) =>
+          best == null || (cur.last_unit_cost! < best.last_unit_cost!)
+            ? cur
+            : best,
+        null,
+      );
+    const fastest = links
+      .filter((l) => l.lead_time_days != null)
+      .reduce<SupplierLink | null>(
+        (best, cur) =>
+          best == null || (cur.lead_time_days! < best.lead_time_days!) ? cur : best,
+        null,
+      );
+    return {
+      cheapestId: cheapest?.id ?? null,
+      fastestId: fastest?.id ?? null,
+    };
+  }, [links]);
 
   useEffect(() => {
     reload();
@@ -111,7 +135,26 @@ export function SupplierLinksPanel({ productId }: { productId: number }) {
                   {l.supplier_name}
                 </Link>
                 {l.is_preferred && (
-                  <Star className="h-3 w-3 inline ml-1.5 text-amber-500 fill-amber-500" />
+                  <Star
+                    className="h-3 w-3 inline ml-1.5 text-amber-500 fill-amber-500"
+                    aria-label="Birincil"
+                  />
+                )}
+                {links.length > 1 && winners.cheapestId === l.id && (
+                  <span
+                    className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700"
+                    title="En ucuz son alış maliyeti"
+                  >
+                    <Trophy className="h-2.5 w-2.5" /> En ucuz
+                  </span>
+                )}
+                {links.length > 1 && winners.fastestId === l.id && (
+                  <span
+                    className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700"
+                    title="En kısa tedarik süresi"
+                  >
+                    <Zap className="h-2.5 w-2.5" /> En hızlı
+                  </span>
                 )}
                 <p className="text-xs text-slate-500">
                   SKU: {l.supplier_sku ?? "—"} · Son alış:{" "}
