@@ -55,6 +55,7 @@ async def find_delayed_shipments(
                 "order_id": s.order_id,
                 "customer_id": cust.id if cust else None,
                 "customer_name": cust.name if cust else None,
+                "telegram_user_id": cust.telegram_user_id if cust else None,
                 "tracking_no": s.tracking_no,
                 "carrier": s.carrier,
                 "current_status": s.status.value,

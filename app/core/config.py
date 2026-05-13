@@ -13,7 +13,19 @@ class Settings(BaseSettings):
     DATABASE_TEST_URL: str = "postgresql+asyncpg://kobi:kobi@localhost:5432/kobi_test_db"
 
     GEMINI_API_KEY: str = ""
+    # Çoklu key fallback: virgülle ayrılmış key'ler. 429 alınınca sıradakine geçer.
+    GEMINI_API_KEYS: str = ""
     GEMINI_MODEL: str = "gemini-flash-latest"
+    # Admin'in Telegram chat ID'si (proaktif gecikme bildirimi için, opsiyonel)
+    ADMIN_TELEGRAM_ID: str = ""
+
+    # Prediktif stok tahmin job'u (her N saatte bir çalışır)
+    STOCK_FORECAST_ENABLED: bool = False
+    STOCK_FORECAST_INTERVAL_HOURS: int = 6
+    STOCK_FORECAST_DAYS_AHEAD: int = 7
+
+    # Proaktif Telegram bildirimleri (kargo gecikmesi vb.) — opt-in
+    PROACTIVE_NOTIFICATIONS_ENABLED: bool = False
 
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_WEBHOOK_SECRET: str = "change_me"
@@ -32,6 +44,18 @@ class Settings(BaseSettings):
     CARGO_AUTO_ADVANCE_INTERVAL_MIN: int = 2
 
     CORS_ORIGINS: str = "http://localhost:3000"
+
+    @property
+    def gemini_api_keys_list(self) -> list[str]:
+        """Tüm Gemini key'leri sırasıyla döner (GEMINI_API_KEYS + GEMINI_API_KEY)."""
+        keys: list[str] = []
+        if self.GEMINI_API_KEYS.strip():
+            keys.extend(
+                k.strip() for k in self.GEMINI_API_KEYS.split(",") if k.strip()
+            )
+        if self.GEMINI_API_KEY.strip() and self.GEMINI_API_KEY.strip() not in keys:
+            keys.append(self.GEMINI_API_KEY.strip())
+        return keys
 
     @property
     def cors_origins_list(self) -> list[str]:

@@ -144,6 +144,61 @@ _CATEGORY_SCORES = {
 }
 
 
+async def _notify_delay_to_customer(finding: dict) -> None:
+    """Kargo gecikmesi tespit edilince müşteriye Telegram özür mesajı gönder.
+
+    PROACTIVE_NOTIFICATIONS_ENABLED kapalıysa hiçbir şey yapmaz. Müşterinin
+    telegram_user_id'si finding'den okunur (find_delayed_shipments dolduruyor).
+    """
+    if not settings.PROACTIVE_NOTIFICATIONS_ENABLED:
+        return
+    tg_id = finding.get("telegram_user_id")
+    if not tg_id:
+        return
+    try:
+        from app.integrations.telegram_client import telegram_client
+
+        order_id = finding.get("order_id")
+        days = finding.get("days_overdue", 1)
+        location = finding.get("current_location") or "yolda"
+        name = finding.get("customer_name") or "müşterimiz"
+        msg = (
+            f"Merhaba {name}, #{order_id} numaralı siparişinizin "
+            f"kargo teslim tarihi {days} gün geçti (mevcut konum: {location}). "
+            f"Gecikme için özür dileriz. Durumu yakından takip ediyoruz ve "
+            f"en kısa zamanda elinize ulaşması için kargo firmasıyla görüşüyoruz."
+        )
+        await telegram_client.send_message(tg_id, msg)
+        logger.info(
+            "Delay apology sent: tg=%s order=%s days_overdue=%s",
+            tg_id, order_id, days,
+        )
+    except Exception:
+        logger.exception("Delay notification to customer failed")
+
+
+async def _notify_delay_to_admin(finding: dict) -> None:
+    """Admin'e geciken kargo özet bildirimi."""
+    if not settings.PROACTIVE_NOTIFICATIONS_ENABLED:
+        return
+    if not settings.ADMIN_TELEGRAM_ID:
+        return
+    try:
+        from app.integrations.telegram_client import telegram_client
+
+        msg = (
+            f"⚠️ Kargo gecikme alarmı\n\n"
+            f"Sipariş #{finding.get('order_id')} ({finding.get('customer_name')})\n"
+            f"Takip: {finding.get('tracking_no')} ({finding.get('carrier')})\n"
+            f"Gecikme: {finding.get('days_overdue')} gün\n"
+            f"Mevcut konum: {finding.get('current_location') or 'bilinmiyor'}\n"
+            f"Müşteriye otomatik özür mesajı iletildi."
+        )
+        await telegram_client.send_message(int(settings.ADMIN_TELEGRAM_ID), msg)
+    except Exception:
+        logger.exception("Admin delay notification failed")
+
+
 async def _process_findings(
     db: AsyncSession,
     *,
@@ -152,7 +207,7 @@ async def _process_findings(
     findings: list[dict],
     entity_id_key: str,
 ) -> int:
-    """Bir kategori için tüm bulguları işle: dedupe + LLM + kayıt."""
+    """Bir kategori için tüm bulguları işle: dedupe + LLM + kayıt + (delay ise) Telegram."""
     created = 0
     for finding in findings:
         entity_id = finding.get(entity_id_key)
@@ -179,6 +234,12 @@ async def _process_findings(
             signals=[],
         )
         created += 1
+
+        # Side effect: shipment_delay için müşteri + admin Telegram bildirimi
+        if category == "shipment_delay":
+            await _notify_delay_to_customer(finding)
+            await _notify_delay_to_admin(finding)
+
     return created
 
 

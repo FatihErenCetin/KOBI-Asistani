@@ -63,16 +63,81 @@ class LLMResponse:
     tool_calls_made: list[dict]
 
 
-_client: genai.Client | None = None
+# Çoklu API key havuzu (round-robin + fallback). Key başına client cache.
+_client_cache: dict[str, genai.Client] = {}
+_key_cursor: int = 0
+
+
+def _mask_key(key: str) -> str:
+    return f"{key[:4]}...{key[-4:]}" if len(key) > 8 else "****"
+
+
+def _get_keys() -> list[str]:
+    keys = settings.gemini_api_keys_list
+    if not keys:
+        raise RuntimeError("GEMINI_API_KEY veya GEMINI_API_KEYS tanımlı değil")
+    return keys
+
+
+def _client_for(key: str) -> genai.Client:
+    c = _client_cache.get(key)
+    if c is None:
+        c = genai.Client(api_key=key)
+        _client_cache[key] = c
+    return c
 
 
 def _get_client() -> genai.Client:
-    global _client
-    if _client is None:
-        if not settings.GEMINI_API_KEY:
-            raise RuntimeError("GEMINI_API_KEY not set")
-        _client = genai.Client(api_key=settings.GEMINI_API_KEY)
-    return _client
+    """Geriye uyum: aktif cursor'daki key'i döner. Tek caller hala kullanabilir."""
+    global _key_cursor
+    keys = _get_keys()
+    _key_cursor = _key_cursor % len(keys)
+    return _client_for(keys[_key_cursor])
+
+
+async def generate_content_with_fallback(*, contents, config=None, model=None):
+    """429 alındığında sıradaki API key'e geçerek tekrar dener.
+
+    - Tek key varsa _generate_with_retry davranışını taklit eder (retry+wait).
+    - 2+ key varsa: ilk key 429 → hemen sıradakine geç (bekleme yok).
+    - Tüm key'ler tükenirse retry+wait moduna geçer.
+    """
+    global _key_cursor
+    keys = _get_keys()
+    use_model = model or settings.GEMINI_MODEL
+    last_exc: Exception | None = None
+
+    # 1. round: her key'i bir kez dene
+    for offset in range(len(keys)):
+        idx = (_key_cursor + offset) % len(keys)
+        key = keys[idx]
+        client = _client_for(key)
+        try:
+            res = await client.aio.models.generate_content(
+                model=use_model, contents=contents, config=config
+            )
+            _key_cursor = idx  # başarılı key'i sticky tut
+            return res
+        except genai_errors.ClientError as e:
+            if getattr(e, "code", None) != 429:
+                raise
+            logger.warning(
+                "Gemini 429 on key %s, trying next", _mask_key(key)
+            )
+            last_exc = e
+            continue
+
+    # 2. round: hepsi 429 → retry+wait
+    logger.warning(
+        "All %d Gemini keys rate-limited, falling back to wait-retry", len(keys)
+    )
+    client = _client_for(keys[_key_cursor])
+    try:
+        return await _generate_with_retry(
+            client, model=use_model, contents=contents, config=config
+        )
+    except Exception as e:
+        raise (last_exc or e)
 
 
 def _dict_to_schema(d: dict) -> types.Schema:
@@ -133,7 +198,6 @@ async def run_agent_loop(
     history: onceki kullanici/model mesajlari, [{role, parts}] formati
     extra_context: tool handler'lara gecilen ekstra (orn ctx)
     """
-    client = _get_client()
     tool_object = _build_tool_object(tools) if tools else None
 
     contents: list[types.Content] = []
@@ -154,9 +218,8 @@ async def run_agent_loop(
     tool_calls_made: list[dict] = []
 
     for _ in range(MAX_ITERATIONS):
-        response = await _generate_with_retry(
-            client,
-            model=settings.GEMINI_MODEL,
+        # Multi-key fallback: 429 alınca sıradaki key'e geçer.
+        response = await generate_content_with_fallback(
             contents=contents,
             config=config,
         )

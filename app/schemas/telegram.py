@@ -25,6 +25,14 @@ class TelegramVoice(BaseModel):
     file_size: int | None = None
 
 
+class TelegramPhotoSize(BaseModel):
+    file_id: str
+    file_unique_id: str | None = None
+    width: int | None = None
+    height: int | None = None
+    file_size: int | None = None
+
+
 class TelegramMessage(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -33,8 +41,11 @@ class TelegramMessage(BaseModel):
     chat: dict
     date: int
     text: str | None = None
+    caption: str | None = None
     contact: TelegramContact | None = None
     voice: TelegramVoice | None = None
+    # Telegram bir fotoğrafı birden fazla çözünürlükte gönderir; biz en yüksek olanı kullanırız.
+    photo: list[TelegramPhotoSize] | None = None
 
 
 class TelegramCallbackQuery(BaseModel):

@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.logging import setup_logging
 from app.db.session import SessionLocal
 from app.jobs.cargo_advance import advance_active_shipments
+from app.jobs.stock_forecast import run_forecast_job
 from app.services.morning_briefing import send_briefings
 from app.services.proactive_risk_scanner import scan_and_report
 
@@ -47,6 +48,16 @@ async def lifespan(app: FastAPI):
         id="proactive_risk_scan",
         replace_existing=True,
     )
+
+    # Prediktif stok tahmin job'u — admin'e Telegram özet, draft mail log'u
+    if settings.STOCK_FORECAST_ENABLED:
+        scheduler.add_job(
+            lambda: run_forecast_job(settings.STOCK_FORECAST_DAYS_AHEAD),
+            "interval",
+            hours=settings.STOCK_FORECAST_INTERVAL_HOURS,
+            id="stock_forecast",
+            replace_existing=True,
+        )
     scheduler.start()
     yield
     if scheduler:

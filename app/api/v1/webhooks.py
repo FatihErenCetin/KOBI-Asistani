@@ -52,6 +52,13 @@ async def telegram_inbound(
         )
         return {"ok": True}
 
+    # Fotoğraf: Gemini Vision ile ürün tanıma
+    if msg.photo:
+        # En yüksek çözünürlükteki versiyonu seç (Telegram sıralı döner)
+        top_photo = msg.photo[-1]
+        bg.add_task(_process_photo, tg_user_id, top_photo.file_id, msg.caption)
+        return {"ok": True}
+
     if msg.voice:
         transcriber = stt.get_transcriber()
         try:
@@ -120,6 +127,65 @@ async def _check_complaint_risk(tg_user_id: int, customer_id: int | None, text: 
                 )
     except Exception:
         logger.exception("complaint risk check failed")
+
+
+async def _process_photo(tg_user_id: int, file_id: str, caption: str | None):
+    """Telegram'dan gelen fotoğraf: Gemini Vision ile ürün tanı, eşleşmeden agent'a yolla."""
+    from app.core import vision
+    from app.db.crud import products as products_crud
+
+    async with SessionLocal() as db:
+        # Mevcut aktif ürün isimlerini topla (Vision listesinde kullanılır)
+        products = await products_crud.list_all(db)
+        product_names = [p.name for p in products]
+
+    try:
+        result = await vision.identify_product_from_photo(file_id, product_names)
+    except Exception:
+        logger.exception("Vision identify failed")
+        try:
+            await telegram_client.send_message(
+                tg_user_id,
+                "Fotoğrafı işlerken bir sorun oldu. Yazılı olarak iletebilir misiniz?",
+            )
+        except Exception:
+            logger.exception("send fallback failed")
+        return
+
+    if not result.get("identified"):
+        msg = (
+            "Fotoğraftaki ürünü net tanıyamadım. "
+            "Hangi üründen bahsettiğinizi yazabilir misiniz?"
+        )
+        if caption:
+            # Caption varsa onu agent'a yolla
+            logger.info("Vision belirsiz, caption ile agent'a iletiliyor")
+            await _process_text(tg_user_id, caption)
+            return
+        try:
+            await telegram_client.send_message(tg_user_id, msg)
+        except Exception:
+            logger.exception("send 'unidentified' failed")
+        return
+
+    # Tanındı: müşteriye onay mesajı + agent'a niyeti ilet
+    pname = result["product_name"]
+    suggested = result.get("suggested_message") or f"{pname} hakkında bilgi almak istiyorum"
+    if caption:
+        # Caption varsa onu öncelikli kabul et (kullanıcı net niyet yazmış)
+        suggested = caption
+    logger.info(
+        "Vision identified product=%s confidence=%s → agent: %s",
+        pname, result.get("confidence"), suggested[:80],
+    )
+    try:
+        await telegram_client.send_message(
+            tg_user_id,
+            f"📸 Fotoğrafta <b>{pname}</b> gördüm. Anlıyorum…",
+        )
+    except Exception:
+        logger.debug("send vision ack failed", exc_info=True)
+    await _process_text(tg_user_id, suggested)
 
 
 async def _process_text(tg_user_id: int, text: str):
