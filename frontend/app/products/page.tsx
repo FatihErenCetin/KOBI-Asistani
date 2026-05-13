@@ -1,8 +1,10 @@
 "use client";
 
-import { Boxes, Plus } from "lucide-react";
+import { Boxes, Download, FileUp, Percent, Plus, Search } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { BulkPriceModal } from "@/components/products/BulkPriceModal";
 import { ProductFormModal } from "@/components/products/ProductFormModal";
 import { ProductRow } from "@/components/products/ProductRow";
 import { StockAdjustModal } from "@/components/products/StockAdjustModal";
@@ -18,11 +20,21 @@ export default function ProductsPage() {
   const [formMode, setFormMode] = useState<"create" | "edit" | null>(null);
   const [editing, setEditing] = useState<any | null>(null);
   const [adjusting, setAdjusting] = useState<any | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const rows = await api.listProducts({ low_stock_only: lowOnly });
+      const params: any = { low_stock_only: lowOnly };
+      if (debouncedSearch) params.search = debouncedSearch;
+      const rows = await api.listProducts(params);
       setProducts(rows);
       if (rows.length > 0) {
         const ids = rows.map((r: any) => r.id);
@@ -38,7 +50,7 @@ export default function ProductsPage() {
     } finally {
       setLoading(false);
     }
-  }, [lowOnly]);
+  }, [lowOnly, debouncedSearch]);
 
   useEffect(() => {
     reload();
@@ -56,14 +68,14 @@ export default function ProductsPage() {
 
   return (
     <div className="max-w-7xl space-y-5">
-      <header className="flex items-center justify-between">
+      <header className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold">Ürünler & Stok</h1>
           <p className="text-sm text-slate-500 mt-0.5">
             Maliyet, kâr marjı ve 7 günlük satış hızı bir bakışta.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => setLowOnly(false)}
             className={`px-3 py-1 text-sm rounded border ${
@@ -84,17 +96,49 @@ export default function ProductsPage() {
           >
             Düşük Stok
           </button>
+          <a
+            href={api.exportProductsCsvUrl()}
+            target="_blank"
+            rel="noopener"
+            className="inline-flex items-center gap-1.5 px-3 py-1 text-sm rounded border border-slate-300 hover:bg-slate-50"
+            title="CSV indir"
+          >
+            <Download className="h-3.5 w-3.5" /> Dışa Aktar
+          </a>
+          <Link
+            href="/products/import"
+            className="inline-flex items-center gap-1.5 px-3 py-1 text-sm rounded border border-slate-300 hover:bg-slate-50"
+          >
+            <FileUp className="h-3.5 w-3.5" /> İçe Aktar
+          </Link>
+          <button
+            onClick={() => setBulkOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1 text-sm rounded border border-slate-300 hover:bg-slate-50"
+          >
+            <Percent className="h-3.5 w-3.5" /> Toplu Fiyat
+          </button>
           <button
             onClick={() => {
               setEditing(null);
               setFormMode("create");
             }}
-            className="ml-2 inline-flex items-center gap-1.5 px-3 py-1 text-sm rounded bg-brand-600 text-white hover:bg-brand-700"
+            className="ml-1 inline-flex items-center gap-1.5 px-3 py-1 text-sm rounded bg-brand-600 text-white hover:bg-brand-700"
           >
             <Plus className="h-4 w-4" /> Yeni Ürün
           </button>
         </div>
       </header>
+
+      <div className="relative max-w-md">
+        <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Ad, alias veya barkod ile ara..."
+          className="w-full border border-slate-300 rounded pl-9 pr-3 py-1.5 text-sm"
+        />
+      </div>
 
       <table className="w-full bg-white border border-slate-200 rounded-lg overflow-hidden text-sm">
         <thead className="bg-slate-50 text-xs text-slate-600">
@@ -159,6 +203,11 @@ export default function ProductsPage() {
         open={adjusting !== null}
         product={adjusting}
         onClose={() => setAdjusting(null)}
+        onSaved={reload}
+      />
+      <BulkPriceModal
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
         onSaved={reload}
       />
     </div>

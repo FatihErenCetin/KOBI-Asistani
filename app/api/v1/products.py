@@ -1,4 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import csv
+import io
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_admin_optional, get_db, require_admin
@@ -9,6 +13,7 @@ from app.db.crud import products as products_crud
 from app.db.crud import stock_movements as sm_crud
 from app.db.crud import suppliers as suppliers_crud
 from app.db.models import AdminUser, StockMovementReason
+from app.schemas.bulk import BulkPriceUpdate, CsvImportResult
 from app.schemas.product import (
     ProductCreate,
     ProductOut,
@@ -116,6 +121,157 @@ async def bulk_sparklines(
     if len(product_ids) > 200:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Too many ids (max 200)")
     return await analytics.bulk_sparklines(db, product_ids, days=days)
+
+
+@router.get("/export.csv")
+async def export_products_csv(db: AsyncSession = Depends(get_db)):
+    """Aktif urunlerin CSV cikti."""
+    rows = await products_crud.list_all(db, include_inactive=False)
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(
+        [
+            "id",
+            "name",
+            "unit",
+            "price",
+            "cost",
+            "stock",
+            "low_stock_threshold",
+            "barcode",
+            "category",
+            "aliases",
+            "description",
+        ]
+    )
+    for p in rows:
+        writer.writerow(
+            [
+                p.id,
+                p.name,
+                p.unit,
+                p.price,
+                p.cost,
+                p.stock,
+                p.low_stock_threshold,
+                p.barcode or "",
+                p.category or "",
+                p.aliases or "",
+                p.description or "",
+            ]
+        )
+    buf.seek(0)
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=products.csv"},
+    )
+
+
+@router.post("/import.csv", response_model=CsvImportResult)
+async def import_products_csv(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_admin: AdminUser | None = Depends(get_current_admin_optional),
+):
+    """CSV ile toplu urun import.
+
+    Mevcut urun (id eslemesi veya kesin ad eslemesi) UPDATE, yoksa CREATE edilir.
+    Beklenen kolonlar: name, unit, price, cost, stock, low_stock_threshold, barcode,
+    category, aliases, description (sirasiz kabul edilir, header gerekli).
+    """
+    admin_id = current_admin.id if current_admin else None
+    raw = await file.read()
+    try:
+        content = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        content = raw.decode("latin-1", errors="replace")
+    reader = csv.DictReader(io.StringIO(content))
+    created = 0
+    updated = 0
+    skipped: list[dict] = []
+    for i, row in enumerate(reader, start=2):
+        try:
+            name = (row.get("name") or "").strip()
+            if not name:
+                skipped.append({"row": i, "reason": "name boş"})
+                continue
+            existing = None
+            if row.get("id"):
+                try:
+                    existing = await products_crud.get_by_id(db, int(row["id"]))
+                except (ValueError, TypeError):
+                    existing = None
+            if existing is None:
+                matches = await products_crud.search_by_name(db, name, limit=5)
+                existing = next(
+                    (m for m in matches if m.name.lower() == name.lower()), None
+                )
+
+            def _f(key: str, default: float = 0.0) -> float:
+                val = row.get(key)
+                if val in (None, ""):
+                    return default
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    return default
+
+            payload = {
+                "name": name,
+                "unit": row.get("unit") or "kg",
+                "price": _f("price"),
+                "cost": _f("cost"),
+                "low_stock_threshold": _f("low_stock_threshold"),
+                "aliases": (row.get("aliases") or "").strip() or None,
+                "description": (row.get("description") or "").strip() or None,
+                "barcode": (row.get("barcode") or "").strip() or None,
+                "category": (row.get("category") or "").strip() or None,
+            }
+            if existing:
+                await products_crud.update(
+                    db, existing, **payload, admin_id=admin_id, reason="CSV import"
+                )
+                updated += 1
+            else:
+                payload["stock"] = _f("stock")
+                await products_crud.create(db, **payload, admin_id=admin_id)
+                created += 1
+        except Exception as e:
+            skipped.append({"row": i, "reason": str(e)})
+    await db.commit()
+    return CsvImportResult(
+        total_rows=created + updated + len(skipped),
+        created=created,
+        updated=updated,
+        skipped=skipped,
+    )
+
+
+@router.post("/bulk-price", response_model=dict)
+async def bulk_price(
+    payload: BulkPriceUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_admin: AdminUser | None = Depends(get_current_admin_optional),
+):
+    """Filtreli urunlere toplu fiyat/maliyet guncelleme. Reason zorunlu."""
+    admin_id = current_admin.id if current_admin else None
+    try:
+        n = await products_crud.bulk_update_price(
+            db,
+            product_ids=payload.product_ids,
+            category=payload.category,
+            name_pattern=payload.name_pattern,
+            operation=payload.operation,
+            value=payload.value,
+            target=payload.target,
+            reason=payload.reason,
+            admin_id=admin_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
+    await db.commit()
+    return {"updated": n}
 
 
 @router.post("", response_model=ProductOutDetailed, status_code=status.HTTP_201_CREATED)

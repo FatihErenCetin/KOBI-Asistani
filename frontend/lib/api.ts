@@ -101,6 +101,37 @@ export const api = {
   deleteProduct: (id: number) =>
     request<void>(`/products/${id}`, { method: "DELETE" }),
 
+  // Bulk operations
+  exportProductsCsvUrl: () => `${BASE}/products/export.csv`,
+  importProductsCsv: async (file: File): Promise<any> => {
+    const token = getAuthToken();
+    const fd = new FormData();
+    fd.append("file", file);
+    const r = await fetch(`${BASE}/products/import.csv`, {
+      method: "POST",
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: fd,
+    });
+    if (!r.ok) {
+      const t = await r.text().catch(() => "");
+      throw new Error(`API ${r.status}: ${t}`);
+    }
+    return r.json();
+  },
+  bulkPriceUpdate: (data: {
+    product_ids?: number[];
+    category?: string;
+    name_pattern?: string;
+    operation: "percent_increase" | "percent_decrease" | "set_absolute";
+    value: number;
+    target?: "price" | "cost";
+    reason: string;
+  }) =>
+    request<{ updated: number }>("/products/bulk-price", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
   // Stock movements
   adjustStock: (
     id: number,

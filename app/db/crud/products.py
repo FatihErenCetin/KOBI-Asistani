@@ -37,7 +37,13 @@ async def list_all(
         stmt = stmt.where(Product.stock <= Product.low_stock_threshold)
     if search:
         pattern = f"%{search}%"
-        stmt = stmt.where(or_(Product.name.ilike(pattern), Product.aliases.ilike(pattern)))
+        stmt = stmt.where(
+            or_(
+                Product.name.ilike(pattern),
+                Product.aliases.ilike(pattern),
+                Product.barcode.ilike(pattern),
+            )
+        )
     res = await db.execute(stmt.order_by(Product.name))
     return list(res.scalars())
 
@@ -215,3 +221,47 @@ async def soft_delete(db: AsyncSession, product: Product) -> Product:
     product.is_active = False
     await db.flush()
     return product
+
+
+async def bulk_update_price(
+    db: AsyncSession,
+    *,
+    product_ids: list[int] | None,
+    category: str | None,
+    name_pattern: str | None,
+    operation: str,
+    value: float,
+    target: str,
+    reason: str,
+    admin_id: int | None,
+) -> int:
+    """Filtreli urunlere toplu fiyat/maliyet guncelleme. Her degisim history yazar.
+
+    operation: percent_increase | percent_decrease | set_absolute
+    target: price | cost
+    """
+    if target not in ("price", "cost"):
+        raise ValueError("target must be 'price' or 'cost'")
+    if operation not in ("percent_increase", "percent_decrease", "set_absolute"):
+        raise ValueError("invalid operation")
+
+    stmt = select(Product).where(Product.is_active.is_(True))
+    if product_ids:
+        stmt = stmt.where(Product.id.in_(product_ids))
+    if category:
+        stmt = stmt.where(Product.category == category)
+    if name_pattern:
+        stmt = stmt.where(Product.name.ilike(f"%{name_pattern}%"))
+    products = list((await db.execute(stmt)).scalars())
+
+    for p in products:
+        current = p.price if target == "price" else p.cost
+        if operation == "percent_increase":
+            new_val = round(current * (1 + value / 100), 2)
+        elif operation == "percent_decrease":
+            new_val = round(current * (1 - value / 100), 2)
+        else:
+            new_val = round(value, 2)
+        kwargs = {target: new_val, "reason": reason, "admin_id": admin_id}
+        await update(db, p, **kwargs)
+    return len(products)
