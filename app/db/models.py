@@ -164,6 +164,10 @@ class AdminUser(Base):
     password_hash: Mapped[str] = mapped_column(String(200))
     name: Mapped[str] = mapped_column(String(100))
     is_active: Mapped[bool] = mapped_column(default=True)
+    telegram_chat_id: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True, index=True
+    )
+    briefing_enabled: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
