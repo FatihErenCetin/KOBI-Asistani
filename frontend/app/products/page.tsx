@@ -10,6 +10,9 @@ import { api } from "@/lib/api";
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<any[]>([]);
+  const [sparklines, setSparklines] = useState<
+    Record<number, { day: string; units: number }[]>
+  >({});
   const [loading, setLoading] = useState(true);
   const [lowOnly, setLowOnly] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit" | null>(null);
@@ -21,6 +24,17 @@ export default function ProductsPage() {
     try {
       const rows = await api.listProducts({ low_stock_only: lowOnly });
       setProducts(rows);
+      if (rows.length > 0) {
+        const ids = rows.map((r: any) => r.id);
+        try {
+          const sparks = await api.productSparklinesBulk(ids, 7);
+          setSparklines(sparks);
+        } catch {
+          setSparklines({});
+        }
+      } else {
+        setSparklines({});
+      }
     } finally {
       setLoading(false);
     }
@@ -120,6 +134,7 @@ export default function ProductsPage() {
               <ProductRow
                 key={p.id}
                 product={p}
+                series={sparklines[p.id] ?? []}
                 onEdit={(prod) => {
                   setEditing(prod);
                   setFormMode("edit");

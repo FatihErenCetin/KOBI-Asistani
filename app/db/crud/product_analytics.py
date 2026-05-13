@@ -4,6 +4,9 @@ from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
+    Order,
+    OrderItem,
+    OrderStatus,
     Product,
     ProductSupplier,
     StockMovement,
@@ -26,7 +29,20 @@ async def for_product(db: AsyncSession, product: Product) -> dict:
         )
     )
     units_30d = float(sold_30d.scalar_one())
-    revenue_30d = units_30d * product.price
+
+    # Revenue: OrderItem.unit_price ile join — gecmis fiyat degisikliklerini saygi tut
+    revenue_q = await db.execute(
+        select(
+            func.coalesce(func.sum(OrderItem.quantity * OrderItem.unit_price), 0.0)
+        )
+        .join(Order, Order.id == OrderItem.order_id)
+        .where(
+            OrderItem.product_id == product.id,
+            Order.status != OrderStatus.CANCELLED,
+            Order.created_at >= win_30d,
+        )
+    )
+    revenue_30d = float(revenue_q.scalar_one())
 
     sold_7d = await db.execute(
         select(func.coalesce(func.sum(-StockMovement.delta), 0.0)).where(
@@ -85,6 +101,40 @@ async def daily_sales_sparkline(
     for i in range(days):
         d = (datetime.utcnow().date() - timedelta(days=days - 1 - i)).isoformat()
         out.append({"day": d, "units": rows.get(d, 0.0)})
+    return out
+
+
+async def bulk_sparklines(
+    db: AsyncSession, product_ids: list[int], days: int = 7
+) -> dict[int, list[dict]]:
+    """Toplu sparkline. {product_id: [{day, units}, ...]} doner. Tek sorgu."""
+    if not product_ids:
+        return {}
+    since = datetime.utcnow() - timedelta(days=days)
+    res = await db.execute(
+        select(
+            StockMovement.product_id,
+            func.date(StockMovement.created_at).label("day"),
+            func.coalesce(func.sum(-StockMovement.delta), 0.0).label("units"),
+        )
+        .where(
+            StockMovement.product_id.in_(product_ids),
+            StockMovement.reason == StockMovementReason.SALE,
+            StockMovement.created_at >= since,
+        )
+        .group_by(StockMovement.product_id, "day")
+    )
+    by_pid: dict[int, dict[str, float]] = {pid: {} for pid in product_ids}
+    for r in res.all():
+        by_pid[r.product_id][str(r.day)] = float(r.units)
+    out: dict[int, list[dict]] = {}
+    today = datetime.utcnow().date()
+    for pid in product_ids:
+        series = []
+        for i in range(days):
+            d = (today - timedelta(days=days - 1 - i)).isoformat()
+            series.append({"day": d, "units": by_pid[pid].get(d, 0.0)})
+        out[pid] = series
     return out
 
 

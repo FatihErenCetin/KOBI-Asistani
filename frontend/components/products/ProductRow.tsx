@@ -20,11 +20,13 @@ interface Product {
 
 export function ProductRow({
   product,
+  series,
   onEdit,
   onAdjust,
   onDelete,
 }: {
   product: Product;
+  series: { day: string; units: number }[];
   onEdit: (p: Product) => void;
   onAdjust: (p: Product) => void;
   onDelete: (p: Product) => void;
@@ -72,7 +74,7 @@ export function ProductRow({
         )}
       </td>
       <td className="px-4 py-2">
-        <MiniSparkline productId={product.id} />
+        <MiniSparkline series={series} />
       </td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
         <button

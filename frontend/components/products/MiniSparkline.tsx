@@ -1,29 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
-import { api } from "@/lib/api";
-
 interface SparklinePoint {
   day: string;
   units: number;
 }
 
-export function MiniSparkline({ productId }: { productId: number }) {
-  const [series, setSeries] = useState<SparklinePoint[]>([]);
-
-  useEffect(() => {
-    let alive = true;
-    api
-      .productSparkline(productId, 7)
-      .then((s) => alive && setSeries(s))
-      .catch(() => alive && setSeries([]));
-    return () => {
-      alive = false;
-    };
-  }, [productId]);
-
-  if (series.length === 0) {
+export function MiniSparkline({ series }: { series: SparklinePoint[] }) {
+  if (!series || series.length === 0) {
     return <span className="text-xs text-slate-300">—</span>;
   }
 

@@ -118,6 +118,10 @@ export const api = {
   productAnalytics: (id: number) => request<any>(`/products/${id}/analytics`),
   productSparkline: (id: number, days = 7) =>
     request<any[]>(`/products/${id}/sparkline?days=${days}`),
+  productSparklinesBulk: (ids: number[], days = 7) =>
+    request<Record<number, { day: string; units: number }[]>>(
+      `/products/sparklines?ids=${ids.join(",")}&days=${days}`,
+    ),
 
   // Product-supplier links
   productSupplierLinks: (id: number) =>

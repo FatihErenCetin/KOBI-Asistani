@@ -102,6 +102,22 @@ async def list_products(
     return [_to_out(p) for p in rows]
 
 
+@router.get("/sparklines", response_model=dict[int, list[SparklinePoint]])
+async def bulk_sparklines(
+    ids: str = Query(..., description="Virgülle ayrılmış ürün id'leri"),
+    days: int = Query(default=7, ge=1, le=60),
+    db: AsyncSession = Depends(get_db),
+):
+    """Toplu sparkline — liste sayfasinda 30 paralel istek yerine 1 cagri."""
+    try:
+        product_ids = [int(x) for x in ids.split(",") if x.strip()]
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
+    if len(product_ids) > 200:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Too many ids (max 200)")
+    return await analytics.bulk_sparklines(db, product_ids, days=days)
+
+
 @router.post("", response_model=ProductOutDetailed, status_code=status.HTTP_201_CREATED)
 async def create_product(
     payload: ProductCreate,
