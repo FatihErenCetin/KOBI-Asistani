@@ -54,17 +54,22 @@ async def adjust_stock(
     delta: float,
     *,
     reason: StockMovementReason,
+    warehouse_id: int | None = None,
     note: str | None = None,
     reference_type: str | None = None,
     reference_id: int | None = None,
     admin_id: int | None = None,
 ) -> Product:
-    """Stoga delta uygular ve audit kaydi yazar. Tek atomik nokta."""
+    """Stoga delta uygular ve audit kaydi yazar. Tek atomik nokta.
+
+    warehouse_id verilmezse default depo kullanilir.
+    """
     await stock_movements_crud.record(
         db,
         product=product,
         delta=delta,
         reason=reason,
+        warehouse_id=warehouse_id,
         note=note,
         reference_type=reference_type,
         reference_id=reference_id,
@@ -78,9 +83,11 @@ async def set_stock(
     product: Product,
     new_stock: float,
     *,
+    warehouse_id: int | None = None,
     note: str | None = None,
     admin_id: int | None = None,
 ) -> Product:
+    """Mutlak stok ayari — delta hesaplar, audit'ten gecirir. warehouse seçimi opsiyonel."""
     delta = new_stock - product.stock
     if delta == 0:
         return product
@@ -89,6 +96,7 @@ async def set_stock(
         product,
         delta,
         reason=StockMovementReason.ADJUSTMENT,
+        warehouse_id=warehouse_id,
         note=note or "Manuel sayim/duzeltme",
         admin_id=admin_id,
     )

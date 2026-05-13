@@ -51,7 +51,9 @@ async def create_order(
     customer_id: int,
     items: list[tuple[Product, float]],
     note: str | None = None,
+    warehouse_id: int | None = None,
 ) -> Order:
+    """warehouse_id verilmezse default depo kullanılır."""
     total = sum(p.price * qty for p, qty in items)
     order = Order(customer_id=customer_id, status=OrderStatus.PENDING, total=total, note=note)
     db.add(order)
@@ -70,6 +72,7 @@ async def create_order(
             product=product,
             delta=-qty,
             reason=StockMovementReason.SALE,
+            warehouse_id=warehouse_id,
             reference_type="order",
             reference_id=order.id,
         )

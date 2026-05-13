@@ -10,6 +10,7 @@ from app.db.crud import price_history as ph_crud
 from app.db.crud import product_analytics as analytics
 from app.db.crud import product_suppliers as ps_crud
 from app.db.crud import products as products_crud
+from app.db.crud import stock_balances as sb_crud
 from app.db.crud import stock_movements as sm_crud
 from app.db.crud import suppliers as suppliers_crud
 from app.db.models import AdminUser, StockMovementReason
@@ -33,6 +34,7 @@ from app.schemas.supplier import (
     ProductSupplierLinkOut,
     ProductSupplierLinkUpdate,
 )
+from app.schemas.warehouse import WarehouseStockRow
 
 router = APIRouter(
     prefix="/products", tags=["products"], dependencies=[Depends(require_admin)]
@@ -350,7 +352,13 @@ async def adjust_stock(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
     admin_id = current_admin.id if current_admin else None
     await products_crud.adjust_stock(
-        db, p, payload.delta, reason=reason, note=payload.note, admin_id=admin_id
+        db,
+        p,
+        payload.delta,
+        reason=reason,
+        warehouse_id=payload.warehouse_id,
+        note=payload.note,
+        admin_id=admin_id,
     )
     await db.commit()
     return _to_out(p)
@@ -409,6 +417,25 @@ async def get_sparkline(
     db: AsyncSession = Depends(get_db),
 ):
     return await analytics.daily_sales_sparkline(db, product_id, days=days)
+
+
+@router.get("/{product_id}/warehouses", response_model=list[WarehouseStockRow])
+async def product_warehouse_breakdown(
+    product_id: int, db: AsyncSession = Depends(get_db)
+):
+    """Bir urunun deop bazinda stok dagilimi."""
+    p = await products_crud.get_by_id(db, product_id)
+    if p is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Product not found")
+    rows = await sb_crud.breakdown_for_product(db, product_id)
+    return [
+        WarehouseStockRow(
+            warehouse_id=r.warehouse_id,
+            warehouse_name=r.warehouse.name if r.warehouse else "?",
+            quantity=r.quantity,
+        )
+        for r in rows
+    ]
 
 
 @router.get("/{product_id}/suppliers", response_model=list[ProductSupplierLinkOut])

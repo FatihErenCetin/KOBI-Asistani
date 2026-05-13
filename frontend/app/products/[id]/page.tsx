@@ -21,18 +21,21 @@ export default function ProductDetailPage({
   const [product, setProduct] = useState<any | null>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [movements, setMovements] = useState<any[]>([]);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
   const [editOpen, setEditOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
 
   async function reload() {
-    const [p, ph, mv] = await Promise.all([
+    const [p, ph, mv, wh] = await Promise.all([
       api.getProduct(id),
       api.priceHistory(id),
       api.stockMovements(id),
+      api.productWarehouseBreakdown(id),
     ]);
     setProduct(p);
     setHistory(ph);
     setMovements(mv);
+    setWarehouses(wh);
   }
 
   useEffect(() => {
@@ -106,6 +109,25 @@ export default function ProductDetailPage({
           hint={a.daily_velocity ? `${a.daily_velocity}/g` : undefined}
         />
       </section>
+
+      {warehouses.length > 1 && (
+        <section className="bg-white border border-slate-200 rounded-lg p-5">
+          <h2 className="font-semibold mb-3">Depo Dağılımı</h2>
+          <ul className="space-y-1.5 text-sm">
+            {warehouses.map((w) => (
+              <li
+                key={w.warehouse_id}
+                className="flex justify-between border-b border-slate-100 pb-1.5 last:border-0"
+              >
+                <span className="text-slate-700">{w.warehouse_name}</span>
+                <span className="font-medium">
+                  {w.quantity} {product.unit}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white border border-slate-200 rounded-lg p-5">

@@ -36,6 +36,8 @@ export function StockAdjustModal({
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [warehouseId, setWarehouseId] = useState<number | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -43,6 +45,14 @@ export function StockAdjustModal({
       setReason("purchase");
       setNote("");
       setError(null);
+      api
+        .listWarehouses()
+        .then((ws: any[]) => {
+          setWarehouses(ws);
+          const def = ws.find((w) => w.is_default) ?? ws[0];
+          setWarehouseId(def?.id ?? null);
+        })
+        .catch(() => setWarehouses([]));
     }
   }, [open]);
 
@@ -53,11 +63,13 @@ export function StockAdjustModal({
     setError(null);
     setBusy(true);
     try {
-      await api.adjustStock(product.id, {
+      const payload: any = {
         delta: Number(delta),
         reason,
         note: note || undefined,
-      });
+      };
+      if (warehouseId) payload.warehouse_id = warehouseId;
+      await api.adjustStock(product.id, payload);
       onSaved();
       onClose();
     } catch (e: any) {
@@ -80,6 +92,24 @@ export function StockAdjustModal({
           {product.stock} {product.unit}
         </span>
       </p>
+
+      {warehouses.length > 1 && (
+        <>
+          <label className="block text-xs text-slate-600 mb-1">Depo</label>
+          <select
+            value={warehouseId ?? ""}
+            onChange={(e) => setWarehouseId(Number(e.target.value))}
+            className="w-full border border-slate-300 rounded px-3 py-1.5 text-sm mb-3"
+          >
+            {warehouses.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+                {w.is_default && " (ana)"}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
 
       <label className="block text-xs text-slate-600 mb-1">Sebep</label>
       <select

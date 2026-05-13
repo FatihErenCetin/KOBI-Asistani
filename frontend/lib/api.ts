@@ -176,6 +176,24 @@ export const api = {
       method: "DELETE",
     }),
 
+  // Warehouses
+  listWarehouses: (search?: string, include_inactive?: boolean) =>
+    request<any[]>(`/warehouses${qs({ search, include_inactive })}`),
+  getWarehouse: (id: number) => request<any>(`/warehouses/${id}`),
+  createWarehouse: (data: Record<string, any>) =>
+    request<any>("/warehouses", { method: "POST", body: JSON.stringify(data) }),
+  updateWarehouse: (id: number, data: Record<string, any>) =>
+    request<any>(`/warehouses/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteWarehouse: (id: number) =>
+    request<void>(`/warehouses/${id}`, { method: "DELETE" }),
+  productWarehouseBreakdown: (id: number) =>
+    request<{ warehouse_id: number; warehouse_name: string; quantity: number }[]>(
+      `/products/${id}/warehouses`,
+    ),
+
   // Suppliers (top-level CRUD)
   listSuppliers: (search?: string, include_inactive?: boolean) =>
     request<any[]>(`/suppliers${qs({ search, include_inactive })}`),

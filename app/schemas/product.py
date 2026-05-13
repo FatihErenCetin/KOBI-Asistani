@@ -57,6 +57,7 @@ class StockAdjust(BaseModel):
     delta: float
     reason: str  # purchase|adjustment|return|waste
     note: str | None = None
+    warehouse_id: int | None = None
 
 
 class ProductOutDetailed(ProductOut):
