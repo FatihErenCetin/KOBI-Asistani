@@ -54,7 +54,7 @@ export default function RegisterPage() {
     setSubmitting(true);
     try {
       await register(trimmedEmail, password, trimmedName);
-      router.push("/");
+      router.push("/dashboard");
     } catch (err: any) {
       setError(err?.message ?? "Kayıt sırasında bir hata oluştu");
       setSubmitting(false);

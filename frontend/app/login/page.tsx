@@ -45,7 +45,7 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await login(trimmedEmail, password);
-      router.push("/");
+      router.push("/dashboard");
     } catch (err: any) {
       setError(err?.message ?? "Email veya şifre hatalı");
       setSubmitting(false);

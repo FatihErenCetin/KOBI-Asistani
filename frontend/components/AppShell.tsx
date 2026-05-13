@@ -21,7 +21,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 
 const NAV = [
-  { href: "/", label: "Bugün", icon: LayoutDashboard, exact: true },
+  { href: "/dashboard", label: "Bugün", icon: LayoutDashboard, exact: true },
   { href: "/orders", label: "Siparişler", icon: ShoppingCart },
   { href: "/products", label: "Ürünler", icon: Package },
   { href: "/warehouses", label: "Depolar", icon: Warehouse },
@@ -138,14 +138,15 @@ function Sidebar() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isAuthRoute =
+  // Landing + auth sayfaları kendi viewport'larına sahip — sidebar yok
+  const isStandaloneRoute =
+    pathname === "/" ||
     pathname === "/login" ||
     pathname?.startsWith("/login/") ||
     pathname === "/register" ||
     pathname?.startsWith("/register/");
 
-  if (isAuthRoute) {
-    // Auth pages own the full viewport — no sidebar, no chrome.
+  if (isStandaloneRoute) {
     return <>{children}</>;
   }
 
