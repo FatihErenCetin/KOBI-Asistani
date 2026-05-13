@@ -84,10 +84,76 @@ export const api = {
       body: JSON.stringify({ status }),
     }),
 
-  // Products
-  listProducts: (params?: { search?: string; low_stock_only?: boolean }) =>
-    request<any[]>(`/products${qs(params)}`),
+  // Products — list, get, create, update, soft-delete
+  listProducts: (params?: {
+    search?: string;
+    low_stock_only?: boolean;
+    include_inactive?: boolean;
+  }) => request<any[]>(`/products${qs(params)}`),
   getProduct: (id: number) => request<any>(`/products/${id}`),
+  createProduct: (data: Record<string, any>) =>
+    request<any>("/products", { method: "POST", body: JSON.stringify(data) }),
+  updateProduct: (id: number, data: Record<string, any>) =>
+    request<any>(`/products/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteProduct: (id: number) =>
+    request<void>(`/products/${id}`, { method: "DELETE" }),
+
+  // Stock movements
+  adjustStock: (
+    id: number,
+    data: { delta: number; reason: string; note?: string },
+  ) =>
+    request<any>(`/products/${id}/stock-movements`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  stockMovements: (id: number) =>
+    request<any[]>(`/products/${id}/movements`),
+
+  // Price history + analytics + sparkline
+  priceHistory: (id: number) => request<any[]>(`/products/${id}/price-history`),
+  productAnalytics: (id: number) => request<any>(`/products/${id}/analytics`),
+  productSparkline: (id: number, days = 7) =>
+    request<any[]>(`/products/${id}/sparkline?days=${days}`),
+
+  // Product-supplier links
+  productSupplierLinks: (id: number) =>
+    request<any[]>(`/products/${id}/suppliers`),
+  addProductSupplierLink: (productId: number, data: Record<string, any>) =>
+    request<any>(`/products/${productId}/suppliers`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateProductSupplierLink: (
+    productId: number,
+    supplierId: number,
+    data: Record<string, any>,
+  ) =>
+    request<any>(`/products/${productId}/suppliers/${supplierId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  removeProductSupplierLink: (productId: number, supplierId: number) =>
+    request<void>(`/products/${productId}/suppliers/${supplierId}`, {
+      method: "DELETE",
+    }),
+
+  // Suppliers (top-level CRUD)
+  listSuppliers: (search?: string, include_inactive?: boolean) =>
+    request<any[]>(`/suppliers${qs({ search, include_inactive })}`),
+  getSupplier: (id: number) => request<any>(`/suppliers/${id}`),
+  createSupplier: (data: Record<string, any>) =>
+    request<any>("/suppliers", { method: "POST", body: JSON.stringify(data) }),
+  updateSupplier: (id: number, data: Record<string, any>) =>
+    request<any>(`/suppliers/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteSupplier: (id: number) =>
+    request<void>(`/suppliers/${id}`, { method: "DELETE" }),
 
   // Customers — backend uses `search` query param
   listCustomers: (search?: string) =>
