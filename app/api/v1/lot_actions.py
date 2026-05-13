@@ -1,14 +1,15 @@
 """SKT yaklasan lot'lar icin AI advisor agent endpoint'leri."""
 
-from datetime import datetime
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, require_admin
-from app.db.crud import stock_lots as lots_crud
 from app.db.models import LotAction, LotActionStatus
 from app.services import expiry_advisor
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/lot-actions",
@@ -38,8 +39,19 @@ async def analyze_expiring(
     db: AsyncSession = Depends(get_db),
 ):
     """Tum yaklasan SKT lot'lari icin AI oneri uret. Idempotent: pending oneri
-    olan lot'lar atlanir."""
-    return await expiry_advisor.analyze_all_expiring(db, within_days=within_days)
+    olan lot'lar atlanir.
+
+    Beklenmedik exception 503 ile detay döner — 500 generic page yerine
+    frontend'e anlamlı bir mesaj sergilenir.
+    """
+    try:
+        return await expiry_advisor.analyze_all_expiring(db, within_days=within_days)
+    except Exception as e:
+        logger.exception("analyze_expiring batch failed")
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            f"AI analiz servisinde geçici sorun: {str(e)[:200]}",
+        ) from e
 
 
 @router.post("/lots/{lot_id}/analyze", response_model=list[dict])
@@ -50,8 +62,6 @@ async def analyze_single_lot(
 ):
     """Tek lot icin oneri uret. force=true ise mevcut pending oneriler de
     silinmeden ekstra oneriler eklenebilir."""
-    lots = await lots_crud.list_for_product(db, 0)  # boş çağrı sadece import için
-    # Doğrudan lookup
     from sqlalchemy import select
 
     from app.db.models import StockLot

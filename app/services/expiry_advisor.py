@@ -293,20 +293,31 @@ async def analyze_lot(
 async def analyze_all_expiring(
     db: AsyncSession, within_days: int = 14
 ) -> dict:
-    """Tüm yaklaşan SKT lot'ları analiz et."""
+    """Tüm yaklaşan SKT lot'ları analiz et.
+
+    Tek bir lot'taki LLM hatası tüm batch'i öldürmesin diye her lot ayrı
+    try/except'te çalışır. Hatalı lot'lar logger.exception ile loglanır,
+    sayım `lots_failed` alanında döner.
+    """
     lots = await lots_crud.expiring_soon(db, within_days=within_days)
     total_actions = 0
     analyzed_lots = 0
+    failed_lots = 0
     for lot in lots:
-        new_actions = await analyze_lot(db, lot)
-        if new_actions:
-            analyzed_lots += 1
-            total_actions += len(new_actions)
+        try:
+            new_actions = await analyze_lot(db, lot)
+            if new_actions:
+                analyzed_lots += 1
+                total_actions += len(new_actions)
+        except Exception as e:
+            logger.exception("analyze_lot failed lot_id=%s: %s", lot.id, e)
+            failed_lots += 1
     await db.commit()
     return {
         "lots_analyzed": analyzed_lots,
         "actions_created": total_actions,
-        "lots_skipped": len(lots) - analyzed_lots,
+        "lots_skipped": len(lots) - analyzed_lots - failed_lots,
+        "lots_failed": failed_lots,
     }
 
 
