@@ -16,6 +16,13 @@ import {
   PanelLeftClose,
 } from "lucide-react";
 
+import {
+  CategoryStockRender,
+  FastDepletingRender,
+  LowMarginRender,
+  ProductAnalyticsCard,
+  SupplierPerformanceRender,
+} from "./AnalyticsRenders";
 import { OrderListRender } from "./OrderListRender";
 import { SalesChart } from "./SalesChart";
 import { StockOverviewRender } from "./StockOverviewRender";
@@ -144,6 +151,13 @@ function RenderData({ data }: { data: any }) {
   if (data.type === "order_list") return <OrderListRender data={data} />;
   if (data.type === "sales_summary") return <SalesChart data={data} />;
   if (data.type === "stock_overview") return <StockOverviewRender data={data} />;
+  if (data.type === "low_margin") return <LowMarginRender data={data} />;
+  if (data.type === "fast_depleting") return <FastDepletingRender data={data} />;
+  if (data.type === "supplier_performance")
+    return <SupplierPerformanceRender data={data} />;
+  if (data.type === "product_analytics")
+    return <ProductAnalyticsCard data={data} />;
+  if (data.type === "category_stock") return <CategoryStockRender data={data} />;
   return null;
 }
 

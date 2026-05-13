@@ -1,9 +1,15 @@
 from datetime import datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Product, StockMovement, StockMovementReason
+from app.db.models import (
+    Product,
+    ProductSupplier,
+    StockMovement,
+    StockMovementReason,
+    Supplier,
+)
 
 
 async def for_product(db: AsyncSession, product: Product) -> dict:
@@ -80,3 +86,109 @@ async def daily_sales_sparkline(
         d = (datetime.utcnow().date() - timedelta(days=days - 1 - i)).isoformat()
         out.append({"day": d, "units": rows.get(d, 0.0)})
     return out
+
+
+async def low_margin_products(
+    db: AsyncSession, margin_threshold: float = 20, limit: int = 30
+) -> list[dict]:
+    """Marji esik altinda olan aktif urunler (kar marji = (price - cost) / price * 100)."""
+    res = await db.execute(
+        select(Product)
+        .where(Product.is_active.is_(True), Product.cost > 0, Product.price > 0)
+        .order_by(Product.name)
+    )
+    rows = []
+    for p in res.scalars():
+        margin = round((p.price - p.cost) / p.price * 100, 1)
+        if margin < margin_threshold:
+            rows.append(
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "unit": p.unit,
+                    "price": p.price,
+                    "cost": p.cost,
+                    "margin_pct": margin,
+                    "stock": p.stock,
+                }
+            )
+    return sorted(rows, key=lambda r: r["margin_pct"])[:limit]
+
+
+async def fast_depleting_products(
+    db: AsyncSession, max_days: float = 7, limit: int = 30
+) -> list[dict]:
+    """Mevcut satis hiziyla N gun icinde bitecek aktif urunler."""
+    res = await db.execute(
+        select(Product).where(Product.is_active.is_(True), Product.stock > 0)
+    )
+    rows = []
+    for p in res.scalars():
+        analytics = await for_product(db, p)
+        dos = analytics["days_of_stock"]
+        if dos is not None and dos <= max_days:
+            rows.append(
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "unit": p.unit,
+                    "stock": p.stock,
+                    "daily_velocity": analytics["daily_velocity"],
+                    "days_of_stock": dos,
+                }
+            )
+    return sorted(rows, key=lambda r: r["days_of_stock"])[:limit]
+
+
+async def supplier_lead_time_stats(db: AsyncSession) -> list[dict]:
+    """Her tedarikci icin ortalama lead_time + bagli urun sayisi + son alis tarihi."""
+    res = await db.execute(
+        select(
+            Supplier.id,
+            Supplier.name,
+            func.avg(ProductSupplier.lead_time_days).label("avg_lead"),
+            func.count(ProductSupplier.id).label("n_products"),
+            func.max(ProductSupplier.last_purchase_at).label("last_purchase"),
+        )
+        .outerjoin(ProductSupplier, ProductSupplier.supplier_id == Supplier.id)
+        .where(Supplier.is_active.is_(True))
+        .group_by(Supplier.id, Supplier.name)
+        .order_by(Supplier.name)
+    )
+    return [
+        {
+            "supplier_id": r.id,
+            "supplier_name": r.name,
+            "avg_lead_time_days": round(float(r.avg_lead), 1) if r.avg_lead else None,
+            "linked_product_count": int(r.n_products or 0),
+            "last_purchase_at": r.last_purchase.isoformat() if r.last_purchase else None,
+        }
+        for r in res.all()
+    ]
+
+
+async def category_stock_overview(db: AsyncSession) -> list[dict]:
+    """Kategori bazinda urun sayisi + toplam stok + dusuk stok sayisi."""
+    low_case = case(
+        (Product.stock <= Product.low_stock_threshold, 1), else_=0
+    )
+    res = await db.execute(
+        select(
+            Product.category,
+            func.count(Product.id).label("n"),
+            func.coalesce(func.sum(Product.stock), 0.0).label("total_stock"),
+            func.coalesce(func.sum(low_case), 0).label("n_low"),
+        )
+        .where(Product.is_active.is_(True))
+        .group_by(Product.category)
+        .order_by(Product.category)
+    )
+    return [
+        {
+            "category": r.category or "Kategorisiz",
+            "product_count": int(r.n),
+            "total_stock": float(r.total_stock or 0),
+            "low_stock_count": int(r.n_low or 0),
+        }
+        for r in res.all()
+    ]

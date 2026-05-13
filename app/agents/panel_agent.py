@@ -3,7 +3,7 @@ from pathlib import Path
 
 from app.core import llm as llm_core
 from app.core.llm import ToolSpec
-from app.tools import customer_tools, order_tools, product_tools
+from app.tools import analytics_tools, customer_tools, order_tools, product_tools
 from app.tools.base import AgentContext
 
 logger = logging.getLogger(__name__)
@@ -96,6 +96,82 @@ def _build_tools() -> list[ToolSpec]:
             },
             handler=order_tools.top_products,
         ),
+        ToolSpec(
+            name="low_margin_products",
+            description=(
+                "Kar marji belirli yuzdenin altinda olan urunleri listeler. "
+                "Marj = (satis_fiyati - maliyet) / satis_fiyati * 100. "
+                "Varsayilan esik %20. Kullanim ornekleri: 'karli olmayan urunler', "
+                "'marji dusuk olanlar', 'hangi urunlerden kazanmiyorum'."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "margin_threshold": {
+                        "type": "number",
+                        "description": "Yuzde olarak esik, varsayilan 20",
+                    }
+                },
+            },
+            handler=analytics_tools.low_margin_products,
+        ),
+        ToolSpec(
+            name="fast_depleting",
+            description=(
+                "Mevcut satis hiziyla N gun icinde bitecek urunleri listeler. "
+                "Varsayilan 7 gun. Kullanim: 'tukenmek uzere olanlar', "
+                "'yakinda bitecek', 'stogu azalan urunler'."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "max_days": {
+                        "type": "number",
+                        "description": "Gun esigi, varsayilan 7",
+                    }
+                },
+            },
+            handler=analytics_tools.fast_depleting,
+        ),
+        ToolSpec(
+            name="supplier_performance",
+            description=(
+                "Her tedarikci icin ortalama tedarik suresi (lead time), bagli urun "
+                "sayisi ve son alis tarihini gosterir. Kullanim: 'tedarikciler nasil', "
+                "'lead time', 'hangi tedarikci hizli'."
+            ),
+            parameters={"type": "object", "properties": {}},
+            handler=analytics_tools.supplier_performance,
+        ),
+        ToolSpec(
+            name="product_analytics_report",
+            description=(
+                "Tek bir urun icin 30 gunluk satis adedi, ciro, gunluk hiz, "
+                "kac gunluk stok kaldigi, kar marji ozeti. Bir urun adi gectigi her "
+                "yerde tek urun bilgisi icin kullan."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "product_id": {
+                        "type": "integer",
+                        "description": "Urun id'si",
+                    }
+                },
+                "required": ["product_id"],
+            },
+            handler=analytics_tools.product_analytics_report,
+        ),
+        ToolSpec(
+            name="category_stock",
+            description=(
+                "Kategori bazinda urun sayisi, toplam stok ve dusuk stok sayisini "
+                "doner. Kullanim: 'hangi kategoride az stok var', "
+                "'kategori bazli stok dagilim'."
+            ),
+            parameters={"type": "object", "properties": {}},
+            handler=analytics_tools.category_stock,
+        ),
     ]
 
 
@@ -120,6 +196,16 @@ def _infer_render_type(tool_calls: list[dict]) -> dict | None:
         return {"type": "stock_overview", **result}
     if name in ("sales_summary", "top_products"):
         return {"type": "sales_summary", **result}
+    if name == "low_margin_products":
+        return {"type": "low_margin", **result}
+    if name == "fast_depleting":
+        return {"type": "fast_depleting", **result}
+    if name == "supplier_performance":
+        return {"type": "supplier_performance", **result}
+    if name == "product_analytics_report":
+        return {"type": "product_analytics", **result}
+    if name == "category_stock":
+        return {"type": "category_stock", **result}
     return {"type": "raw", **result}
 
 
