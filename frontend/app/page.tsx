@@ -287,7 +287,7 @@ function TopNav() {
         <div className="flex items-center gap-2">
           <Link
             href="/login"
-            className="hidden text-sm font-medium text-slate-700 hover:text-slate-900 sm:inline-block"
+            className="text-sm font-medium text-slate-700 hover:text-slate-900"
           >
             Giriş Yap
           </Link>
@@ -977,11 +977,19 @@ function FooterLink({
   href: string;
   children: React.ReactNode;
 }) {
+  // Next.js Link soft-navigation için; "#..." anchor'lar otomatik scroll
+  const isAnchor = href.startsWith("#");
   return (
     <li>
-      <a href={href} className="hover:text-amber-600">
-        {children}
-      </a>
+      {isAnchor ? (
+        <a href={href} className="hover:text-amber-600">
+          {children}
+        </a>
+      ) : (
+        <Link href={href} className="hover:text-amber-600">
+          {children}
+        </Link>
+      )}
     </li>
   );
 }
@@ -992,7 +1000,13 @@ function FooterLink({
 
 function MobileStickyCta() {
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 p-3 backdrop-blur md:hidden">
+    <div className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-2 gap-2 border-t border-slate-200 bg-white/95 p-3 backdrop-blur md:hidden">
+      <Link
+        href="/login"
+        className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
+      >
+        Giriş Yap
+      </Link>
       <Link
         href="/register"
         className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-amber-500/30"
