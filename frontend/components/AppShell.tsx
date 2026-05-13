@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Calendar,
   LayoutDashboard,
   ShoppingCart,
   Package,
@@ -20,6 +21,7 @@ const NAV = [
   { href: "/orders", label: "Siparişler", icon: ShoppingCart },
   { href: "/products", label: "Ürünler", icon: Package },
   { href: "/warehouses", label: "Depolar", icon: Warehouse },
+  { href: "/expiring", label: "Son Kullanma", icon: Calendar },
   { href: "/suppliers", label: "Tedarikçiler", icon: Truck },
   { href: "/customers", label: "Müşteriler", icon: Users },
   { href: "/chat", label: "AI Asistan", icon: Sparkles },

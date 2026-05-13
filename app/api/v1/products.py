@@ -11,6 +11,7 @@ from app.db.crud import product_analytics as analytics
 from app.db.crud import product_suppliers as ps_crud
 from app.db.crud import products as products_crud
 from app.db.crud import stock_balances as sb_crud
+from app.db.crud import stock_lots as lots_crud
 from app.db.crud import stock_movements as sm_crud
 from app.db.crud import suppliers as suppliers_crud
 from app.db.models import AdminUser, StockMovementReason
@@ -34,6 +35,7 @@ from app.schemas.supplier import (
     ProductSupplierLinkOut,
     ProductSupplierLinkUpdate,
 )
+from app.schemas.lot import ExpiringLotRow, StockLotCreate, StockLotOut
 from app.schemas.warehouse import WarehouseStockRow
 
 router = APIRouter(
@@ -250,6 +252,30 @@ async def import_products_csv(
     )
 
 
+@router.get("/expiring", response_model=list[ExpiringLotRow])
+async def expiring_lots(
+    within_days: int = Query(default=14, ge=1, le=365),
+    db: AsyncSession = Depends(get_db),
+):
+    """Onumuzdeki N gun icinde son kullanmasi gelecek lot'lar."""
+    from datetime import date as _date
+
+    rows = await lots_crud.expiring_soon(db, within_days=within_days)
+    today = _date.today()
+    return [
+        ExpiringLotRow(
+            lot_id=lot.id,
+            product_id=lot.product.id,
+            product_name=lot.product.name,
+            lot_number=lot.lot_number,
+            expiry_date=lot.expiry_date,
+            days_left=(lot.expiry_date - today).days,
+            quantity=lot.quantity,
+        )
+        for lot in rows
+    ]
+
+
 @router.post("/bulk-price", response_model=dict)
 async def bulk_price(
     payload: BulkPriceUpdate,
@@ -417,6 +443,84 @@ async def get_sparkline(
     db: AsyncSession = Depends(get_db),
 ):
     return await analytics.daily_sales_sparkline(db, product_id, days=days)
+
+
+@router.get("/{product_id}/lots", response_model=list[StockLotOut])
+async def list_product_lots(
+    product_id: int,
+    warehouse_id: int | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bir urunun lot'larini listele (sadece quantity > 0 olanlar)."""
+    lots = await lots_crud.list_for_product(
+        db, product_id, warehouse_id=warehouse_id, only_with_stock=True
+    )
+    return [
+        StockLotOut(
+            id=lot.id,
+            product_id=lot.product_id,
+            warehouse_id=lot.warehouse_id,
+            warehouse_name=lot.warehouse.name if lot.warehouse else None,
+            lot_number=lot.lot_number,
+            quantity=lot.quantity,
+            expiry_date=lot.expiry_date,
+            supplier_id=lot.supplier_id,
+            supplier_name=lot.supplier.name if lot.supplier else None,
+            received_at=lot.received_at,
+            note=lot.note,
+        )
+        for lot in lots
+    ]
+
+
+@router.post(
+    "/{product_id}/lots", response_model=StockLotOut, status_code=status.HTTP_201_CREATED
+)
+async def create_product_lot(
+    product_id: int,
+    payload: StockLotCreate,
+    db: AsyncSession = Depends(get_db),
+    current_admin: AdminUser | None = Depends(get_current_admin_optional),
+):
+    """Yeni lot ekle + StockMovement(PURCHASE) yazsin ki cache senkron kalsin."""
+    p = await products_crud.get_by_id(db, product_id)
+    if p is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Product not found")
+    admin_id = current_admin.id if current_admin else None
+    lot = await lots_crud.create(
+        db,
+        product_id=product_id,
+        warehouse_id=payload.warehouse_id,
+        lot_number=payload.lot_number,
+        quantity=payload.quantity,
+        expiry_date=payload.expiry_date,
+        supplier_id=payload.supplier_id,
+        note=payload.note,
+    )
+    # Movement de yaz — balance + cache otomatik senkron olur
+    await products_crud.adjust_stock(
+        db,
+        p,
+        payload.quantity,
+        reason=StockMovementReason.PURCHASE,
+        warehouse_id=payload.warehouse_id,
+        note=f"Lot {payload.lot_number} ekleme",
+        admin_id=admin_id,
+    )
+    await db.commit()
+    return StockLotOut(
+        id=lot.id,
+        product_id=lot.product_id,
+        warehouse_id=lot.warehouse_id,
+        warehouse_name=None,
+        lot_number=lot.lot_number,
+        quantity=lot.quantity,
+        expiry_date=lot.expiry_date,
+        supplier_id=lot.supplier_id,
+        supplier_name=None,
+        received_at=lot.received_at,
+        note=lot.note,
+    )
 
 
 @router.get("/{product_id}/warehouses", response_model=list[WarehouseStockRow])

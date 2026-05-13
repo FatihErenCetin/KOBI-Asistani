@@ -4,6 +4,7 @@ import { ArrowLeft, BarChart3, Boxes, Pencil, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { LotPanel } from "@/components/products/LotPanel";
 import { PriceHistoryTable } from "@/components/products/PriceHistoryTable";
 import { ProductFormModal } from "@/components/products/ProductFormModal";
 import { StockAdjustModal } from "@/components/products/StockAdjustModal";
@@ -168,6 +169,8 @@ export default function ProductDetailPage({
         </header>
         <PriceHistoryTable rows={history} />
       </section>
+
+      <LotPanel productId={product.id} productUnit={product.unit} />
 
       <section className="bg-white border border-slate-200 rounded-lg p-5">
         <h2 className="font-semibold mb-3">Stok Hareketleri</h2>

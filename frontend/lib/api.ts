@@ -194,6 +194,19 @@ export const api = {
       `/products/${id}/warehouses`,
     ),
 
+  // Stock lots
+  productLots: (id: number, warehouse_id?: number) => {
+    const q = warehouse_id ? `?warehouse_id=${warehouse_id}` : "";
+    return request<any[]>(`/products/${id}/lots${q}`);
+  },
+  createProductLot: (id: number, data: any) =>
+    request<any>(`/products/${id}/lots`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  expiringLots: (within_days = 14) =>
+    request<any[]>(`/products/expiring?within_days=${within_days}`),
+
   // Suppliers (top-level CRUD)
   listSuppliers: (search?: string, include_inactive?: boolean) =>
     request<any[]>(`/suppliers${qs({ search, include_inactive })}`),
