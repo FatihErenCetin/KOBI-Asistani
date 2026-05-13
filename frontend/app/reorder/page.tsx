@@ -1,9 +1,10 @@
 "use client";
 
-import { Clock, RefreshCw, ShoppingBag, Star } from "lucide-react";
+import { Clock, Copy, Mail, RefreshCw, ShoppingBag, Star } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { Modal } from "@/components/ui/Modal";
 import { api } from "@/lib/api";
 import { formatTRY } from "@/lib/format";
 
@@ -25,6 +26,40 @@ interface Suggestion {
 export default function ReorderPage() {
   const [rows, setRows] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [draft, setDraft] = useState<any | null>(null);
+  const [draftBusy, setDraftBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function openDraft(r: Suggestion) {
+    if (!r.supplier_id) return;
+    setDraftBusy(true);
+    setCopied(false);
+    try {
+      const d = await api.reorderDraftMail({
+        product_id: r.product_id,
+        order_qty: r.suggested_order_qty,
+        supplier_id: r.supplier_id,
+      });
+      setDraft({ ...d, product_name: r.product_name });
+    } catch (e: any) {
+      alert(e?.message ?? "Hata");
+    } finally {
+      setDraftBusy(false);
+    }
+  }
+
+  async function copyDraft() {
+    if (!draft) return;
+    try {
+      await navigator.clipboard.writeText(
+        `Konu: ${draft.subject}\n\n${draft.body}`,
+      );
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // graceful
+    }
+  }
 
   async function reload() {
     setLoading(true);
@@ -69,6 +104,7 @@ export default function ReorderPage() {
             <th className="text-left px-4 py-2">Tedarikçi</th>
             <th className="text-right px-4 py-2">Lead Time</th>
             <th className="text-right px-4 py-2">Tahmini Maliyet</th>
+            <th className="text-right px-4 py-2"></th>
           </tr>
         </thead>
         <tbody>
@@ -138,10 +174,72 @@ export default function ReorderPage() {
                 <td className="px-4 py-2 text-right">
                   {r.estimated_cost != null ? formatTRY(r.estimated_cost) : "—"}
                 </td>
+                <td className="px-4 py-2 text-right">
+                  {r.supplier_id && (
+                    <button
+                      onClick={() => openDraft(r)}
+                      disabled={draftBusy}
+                      className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-slate-300 hover:bg-slate-50"
+                    >
+                      <Mail className="h-3 w-3" /> Mail Taslağı
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
         </tbody>
       </table>
+
+      <Modal
+        open={draft !== null}
+        onClose={() => setDraft(null)}
+        title={`Mail Taslağı: ${draft?.product_name ?? ""}`}
+        size="lg"
+      >
+        <div className="space-y-3">
+          {draft?.supplier_email && (
+            <p className="text-xs text-slate-500">
+              Tedarikçi:{" "}
+              <span className="font-mono">{draft.supplier_email}</span>
+              {draft.supplier_phone && (
+                <span> · Telefon: {draft.supplier_phone}</span>
+              )}
+            </p>
+          )}
+          <div>
+            <label className="block text-xs text-slate-600 mb-1">Konu</label>
+            <input
+              readOnly
+              value={draft?.subject ?? ""}
+              className="w-full border border-slate-300 rounded px-3 py-1.5 text-sm bg-slate-50"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-600 mb-1">Mesaj</label>
+            <textarea
+              readOnly
+              value={draft?.body ?? ""}
+              rows={12}
+              className="w-full border border-slate-300 rounded px-3 py-2 text-sm font-mono bg-slate-50"
+            />
+          </div>
+        </div>
+        <footer className="mt-4 flex justify-end gap-2">
+          <button
+            onClick={copyDraft}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded bg-brand-600 text-white hover:bg-brand-700"
+          >
+            <Copy className="h-3.5 w-3.5" />
+            {copied ? "Kopyalandı ✓" : "Kopyala"}
+          </button>
+          <button
+            onClick={() => setDraft(null)}
+            className="px-3 py-1.5 text-sm rounded border border-slate-300"
+          >
+            Kapat
+          </button>
+        </footer>
+      </Modal>
     </div>
   );
 }

@@ -207,8 +207,22 @@ export const api = {
   expiringLots: (within_days = 14) =>
     request<any[]>(`/products/expiring?within_days=${within_days}`),
 
-  // Reorder suggestions
+  // Reorder suggestions + draft mail
   reorderSuggestions: () => request<any[]>("/reorder/suggestions"),
+  reorderDraftMail: (data: {
+    product_id: number;
+    order_qty: number;
+    supplier_id?: number | null;
+  }) =>
+    request<{
+      subject: string;
+      body: string;
+      supplier_email: string | null;
+      supplier_phone: string | null;
+    }>("/reorder/draft-mail", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 
   // Suppliers (top-level CRUD)
   listSuppliers: (search?: string, include_inactive?: boolean) =>
