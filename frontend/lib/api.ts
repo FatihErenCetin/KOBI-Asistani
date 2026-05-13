@@ -221,6 +221,14 @@ export const api = {
       total: number;
     }>("/complaints/scan", { method: "POST" }),
 
+  // Admin tools
+  enrichDemoData: () =>
+    request<{
+      warehouses_created: number;
+      lots_created: number;
+      products_split: number;
+    }>("/admin/enrich-demo-data", { method: "POST" }),
+
   // Reorder suggestions + draft mail
   reorderSuggestions: () => request<any[]>("/reorder/suggestions"),
   reorderDraftMail: (data: {
