@@ -14,6 +14,7 @@ import {
   Users,
   Sparkles,
   LogOut,
+  Store,
   Truck,
   Warehouse,
 } from "lucide-react";
@@ -28,6 +29,7 @@ const NAV = [
   { href: "/expiring", label: "Son Kullanma", icon: Calendar },
   { href: "/reorder", label: "Sipariş Önerileri", icon: ShoppingBag },
   { href: "/suppliers", label: "Tedarikçiler", icon: Truck },
+  { href: "/marketplace", label: "Tedarikçi Pazarı", icon: Store },
   { href: "/customers", label: "Müşteriler", icon: Users },
   { href: "/finance", label: "Finansal Analiz", icon: DollarSign },
   { href: "/social", label: "Sosyal Medya", icon: Megaphone },

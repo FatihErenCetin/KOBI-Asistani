@@ -71,6 +71,68 @@ SUPPLIER_CATALOG = [
     ("Trabzon Findik Ltd.", "Fatma Hanim", "+905321110055", "info@trabzonfindik.example", "Trabzon"),
 ]
 
+# Marketplace: tedarikçi ek meta (kategori, kargo, şehir, açıklama, rating)
+# Index SUPPLIER_CATALOG ile aynı sırada.
+SUPPLIER_META = [
+    ("Bal & Reçel", "Yurtici Kargo", "Ankara", "Cankaya",
+     "Yore aricilarindan dogal cicek ve cam bali", 4.7),
+    ("Zeytin & Yag", "Aras Kargo", "Izmir", "Karsiyaka",
+     "Erken hasat naturel sizma zeytinyagi uzmani", 4.8),
+    ("Sebze & Bakliyat", "MNG Kargo", "Konya", "Cumra",
+     "Bulgur, mercimek ve bugday unu toptanci", 4.4),
+    ("Sut Urunleri", "Aras Kargo", "Bursa", "Osmangazi",
+     "Tam yagli inek peyniri, kaymakli yogurt, koy tereyagi", 4.6),
+    ("Kuruyemis", "Yurtici Kargo", "Trabzon", "Akcaabat",
+     "Findik ve kuruyemis (taze hasat)", 4.5),
+]
+
+# Mock yakın KOBİ kataloğu (marketplace komşu önerisi için)
+# (name, shop_type, city, district, distance_km, preferred_carrier)
+NEARBY_SHOP_CATALOG = [
+    ("Yildiz Bakkal", "bakkal", "Istanbul", "Kadikoy", 0.8, "Yurtici Kargo"),
+    ("Mavi Market", "manav", "Istanbul", "Kadikoy", 1.2, "Yurtici Kargo"),
+    ("Anadolu Sarkuteri", "sarkuteri", "Istanbul", "Uskudar", 3.5, "Yurtici Kargo"),
+    ("Aile Mini Market", "bakkal", "Istanbul", "Atasehir", 5.4, "Aras Kargo"),
+    ("Beyaz Buz Soguk Hava", "kasap", "Istanbul", "Atasehir", 6.1, "Aras Kargo"),
+    ("Cinar Sebze Meyve", "manav", "Istanbul", "Maltepe", 8.2, "Yurtici Kargo"),
+    ("Bahar Bakkaliye", "bakkal", "Istanbul", "Pendik", 12.5, "MNG Kargo"),
+    ("Hilal Market", "bakkal", "Istanbul", "Umraniye", 7.3, "Yurtici Kargo"),
+]
+
+# (shop_name, supplier_name_or_none, product_name, product_category, qty,
+#  unit_cost, carrier, days_ago)
+# Komşuların son N gün satınalmaları — marketplace advisor sinyali
+NEARBY_PURCHASE_CATALOG = [
+    # Bal trend (4 shop son 2 hafta) — yüksek confidence öneri çıkmalı
+    ("Yildiz Bakkal", "Anadolu Bal Kooperatifi", "Bal", "Bal & Recel", 12, 185, "Yurtici Kargo", 3),
+    ("Mavi Market", "Anadolu Bal Kooperatifi", "Bal", "Bal & Recel", 8, 190, "Yurtici Kargo", 5),
+    ("Anadolu Sarkuteri", "Anadolu Bal Kooperatifi", "Bal", "Bal & Recel", 15, 180, "Yurtici Kargo", 8),
+    ("Aile Mini Market", "Anadolu Bal Kooperatifi", "Bal", "Bal & Recel", 10, 188, "Aras Kargo", 12),
+    # Zeytinyagi trend (3 shop)
+    ("Yildiz Bakkal", "Ege Zeytin A.S.", "Zeytinyagi", "Zeytin & Yag", 20, 215, "Yurtici Kargo", 4),
+    ("Cinar Sebze Meyve", "Ege Zeytin A.S.", "Zeytinyagi", "Zeytin & Yag", 24, 210, "Yurtici Kargo", 6),
+    ("Aile Mini Market", "Ege Zeytin A.S.", "Zeytinyagi", "Zeytin & Yag", 18, 220, "Aras Kargo", 10),
+    # Peynir trend (3 shop) — sut urunleri kategorisi
+    ("Beyaz Buz Soguk Hava", "Bursa Mandiracilik", "Peynir", "Sut Urunleri", 30, 158, "Aras Kargo", 2),
+    ("Aile Mini Market", "Bursa Mandiracilik", "Peynir", "Sut Urunleri", 22, 160, "Aras Kargo", 5),
+    ("Hilal Market", "Bursa Mandiracilik", "Peynir", "Sut Urunleri", 18, 155, "Yurtici Kargo", 9),
+    # Bulgur trend (2 shop)
+    ("Bahar Bakkaliye", "Cumra Tarim Urunleri", "Bulgur", "Sebze & Bakliyat", 50, 24, "MNG Kargo", 6),
+    ("Hilal Market", "Cumra Tarim Urunleri", "Bulgur", "Sebze & Bakliyat", 35, 25, "Yurtici Kargo", 11),
+    # Findik trend (2 shop) - kuruyemis
+    ("Cinar Sebze Meyve", "Trabzon Findik Ltd.", "Findik", "Kuruyemis", 8, 285, "Yurtici Kargo", 7),
+    ("Hilal Market", "Trabzon Findik Ltd.", "Findik", "Kuruyemis", 12, 280, "Yurtici Kargo", 13),
+    # Yogurt trend (3 shop)
+    ("Mavi Market", "Bursa Mandiracilik", "Yogurt", "Sut Urunleri", 40, 38, "Yurtici Kargo", 4),
+    ("Yildiz Bakkal", "Bursa Mandiracilik", "Yogurt", "Sut Urunleri", 25, 40, "Yurtici Kargo", 8),
+    ("Beyaz Buz Soguk Hava", "Bursa Mandiracilik", "Yogurt", "Sut Urunleri", 50, 36, "Aras Kargo", 11),
+    # Recel trend (2 shop) - bal kategorisinin yakini
+    ("Anadolu Sarkuteri", "Anadolu Bal Kooperatifi", "Recel", "Bal & Recel", 16, 72, "Yurtici Kargo", 9),
+    ("Aile Mini Market", "Anadolu Bal Kooperatifi", "Recel", "Bal & Recel", 20, 68, "Aras Kargo", 14),
+    # Salca trend - tek shop, signal_count threshold altında kalır, demo
+    ("Bahar Bakkaliye", "Cumra Tarim Urunleri", "Salca", "Sebze & Bakliyat", 60, 48, "MNG Kargo", 5),
+]
+
 # (name, code, address, is_default)
 WAREHOUSE_CATALOG = [
     ("Ana Depo", "main", "Merkez işletme deposu", True),

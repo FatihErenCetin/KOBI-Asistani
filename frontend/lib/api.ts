@@ -377,6 +377,58 @@ export const api = {
   publishSocialPost: (post_id: number) =>
     request<any>(`/social/posts/${post_id}/publish`, { method: "POST" }),
 
+  // Marketplace — tedarikçi pazarı
+  marketplaceSuppliers: (params?: {
+    category?: string;
+    carrier?: string;
+    city?: string;
+    search?: string;
+  }) => request<any[]>(`/marketplace/suppliers${qs(params)}`),
+  marketplaceRecent: (limit = 6) =>
+    request<any[]>(`/marketplace/suppliers/recent?limit=${limit}`),
+  marketplaceFilters: () =>
+    request<{ categories: string[]; carriers: string[]; cities: string[] }>(
+      "/marketplace/suppliers/filters",
+    ),
+  marketplacePurchaseOrders: (status?: string) =>
+    request<any[]>(`/marketplace/purchase-orders${qs({ status })}`),
+  createPurchaseOrder: (data: {
+    supplier_id: number;
+    items: { product_id: number; quantity: number; unit_cost: number }[];
+    expected_delivery?: string;
+    notes?: string;
+    recommendation_id?: number;
+  }) =>
+    request<any>("/marketplace/purchase-orders", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updatePurchaseOrderStatus: (id: number, status: string) =>
+    request<any>(`/marketplace/purchase-orders/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+  marketplaceRecommendations: () =>
+    request<any[]>("/marketplace/recommendations"),
+  generateMarketplaceRecommendations: (data?: {
+    since_days?: number;
+    min_signal_count?: number;
+    max_recommendations?: number;
+  }) =>
+    request<any[]>("/marketplace/recommendations/generate", {
+      method: "POST",
+      body: JSON.stringify(data ?? {}),
+    }),
+  dismissRecommendation: (id: number) =>
+    request<void>(`/marketplace/recommendations/${id}/dismiss`, {
+      method: "POST",
+    }),
+  nearbySignals: (params: {
+    city: string;
+    carrier?: string;
+    since_days?: number;
+  }) => request<any[]>(`/marketplace/nearby-signals${qs(params)}`),
+
   // Auth
   me: () => request<any>("/auth/me"),
 };

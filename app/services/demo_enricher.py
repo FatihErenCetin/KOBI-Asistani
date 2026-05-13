@@ -19,8 +19,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.crud import stock_balances as sb_crud
 from app.db.models import (
+    AdminUser,
     Expense,
     ExpenseCategory,
+    NearbyShop,
+    NearbyShopPurchase,
     PriceHistory,
     PriceHistoryField,
     Product,
@@ -39,9 +42,12 @@ from app.db.models import (
 from app.db.seed import (
     LOT_CATALOG,
     MULTI_WAREHOUSE_SPLIT,
+    NEARBY_PURCHASE_CATALOG,
+    NEARBY_SHOP_CATALOG,
     SOCIAL_ACCOUNT_CATALOG,
     SOCIAL_POST_CATALOG,
     SUPPLIER_CATALOG,
+    SUPPLIER_META,
     WAREHOUSE_CATALOG,
 )
 
@@ -622,11 +628,156 @@ async def ensure_social_posts(db: AsyncSession) -> dict:
     return {"social_posts_created": created}
 
 
+async def ensure_supplier_marketplace_meta(db: AsyncSession) -> dict:
+    """SUPPLIER_META'daki kategori/kargo/şehir/açıklama/rating'leri SUPPLIER_CATALOG
+    sıralı eşleştir. Eksikse ekler; varsa override etmez (idempotent).
+    """
+    res = await db.execute(select(Supplier))
+    suppliers = list(res.scalars())
+    by_name = {s.name: s for s in suppliers}
+
+    updated = 0
+    for (name, *_), meta in zip(SUPPLIER_CATALOG, SUPPLIER_META, strict=False):
+        s = by_name.get(name)
+        if s is None:
+            continue
+        category, carrier, city, district, description, rating = meta
+        changed = False
+        if not s.category and category:
+            s.category = category
+            changed = True
+        if not s.carrier and carrier:
+            s.carrier = carrier
+            changed = True
+        if not s.city and city:
+            s.city = city
+            changed = True
+        if not s.district and district:
+            s.district = district
+            changed = True
+        if not s.description and description:
+            s.description = description
+            changed = True
+        if s.rating is None and rating is not None:
+            s.rating = rating
+            changed = True
+        if changed:
+            updated += 1
+    await db.flush()
+    return {"supplier_meta_updated": updated}
+
+
+async def ensure_admin_location(db: AsyncSession) -> dict:
+    """Aktif admin'lerden ilki için marketplace varsayılan konum/kargo set et.
+
+    Multi-tenant değiliz; hackathon demosunda ana admin Istanbul'daki bir KOBİ
+    olarak temsil ediliyor. Komşu KOBİ verisi de Istanbul'da.
+    """
+    res = await db.execute(
+        select(AdminUser).where(AdminUser.is_active.is_(True)).order_by(AdminUser.id.asc())
+    )
+    admins = list(res.scalars())
+    updated = 0
+    for admin in admins:
+        changed = False
+        if not admin.city:
+            admin.city = "Istanbul"
+            changed = True
+        if not admin.district:
+            admin.district = "Kadikoy"
+            changed = True
+        if not admin.preferred_carrier:
+            admin.preferred_carrier = "Yurtici Kargo"
+            changed = True
+        if changed:
+            updated += 1
+    await db.flush()
+    return {"admin_location_updated": updated}
+
+
+async def ensure_nearby_shops(db: AsyncSession) -> dict:
+    """NEARBY_SHOP_CATALOG'taki mock komşuları idempotent ekle."""
+    res = await db.execute(select(NearbyShop))
+    existing_names = {s.name for s in res.scalars()}
+    created = 0
+    for name, shop_type, city, district, distance_km, carrier in NEARBY_SHOP_CATALOG:
+        if name in existing_names:
+            continue
+        db.add(
+            NearbyShop(
+                name=name,
+                shop_type=shop_type,
+                city=city,
+                district=district,
+                distance_km=distance_km,
+                preferred_carrier=carrier,
+                is_active=True,
+            )
+        )
+        created += 1
+    await db.flush()
+    return {"nearby_shops_created": created}
+
+
+async def ensure_nearby_purchases(db: AsyncSession) -> dict:
+    """NEARBY_PURCHASE_CATALOG'taki mock satınalmaları ekle.
+
+    İdempotent: eğer hiç purchase yoksa hepsi eklenir, varsa atlanır
+    (count tabanlı kısa devre).
+    """
+    count_res = await db.execute(select(func.count(NearbyShopPurchase.id)))
+    if int(count_res.scalar_one() or 0) > 0:
+        return {"nearby_purchases_created": 0}
+
+    shop_res = await db.execute(select(NearbyShop))
+    shops_by_name = {s.name: s for s in shop_res.scalars()}
+
+    supp_res = await db.execute(select(Supplier))
+    suppliers_by_name = {s.name: s for s in supp_res.scalars()}
+
+    created = 0
+    for (
+        shop_name,
+        supplier_name,
+        product_name,
+        category,
+        qty,
+        unit_cost,
+        carrier,
+        days_ago,
+    ) in NEARBY_PURCHASE_CATALOG:
+        shop = shops_by_name.get(shop_name)
+        if shop is None:
+            continue
+        supplier = (
+            suppliers_by_name.get(supplier_name) if supplier_name else None
+        )
+        db.add(
+            NearbyShopPurchase(
+                shop_id=shop.id,
+                supplier_id=supplier.id if supplier else None,
+                product_name=product_name,
+                product_category=category,
+                quantity=qty,
+                unit_cost=unit_cost,
+                carrier=carrier,
+                purchased_at=datetime.utcnow() - timedelta(days=days_ago),
+            )
+        )
+        created += 1
+    await db.flush()
+    return {"nearby_purchases_created": created}
+
+
 async def enrich_all(db: AsyncSession) -> dict:
     """Tüm idempotent zenginleştirmeleri sırayla uygula."""
     result = {}
     result.update(await ensure_warehouses(db))
     result.update(await ensure_suppliers(db))
+    result.update(await ensure_supplier_marketplace_meta(db))
+    result.update(await ensure_admin_location(db))
+    result.update(await ensure_nearby_shops(db))
+    result.update(await ensure_nearby_purchases(db))
     result.update(await ensure_product_supplier_links(db))
     result.update(await ensure_multi_warehouse(db))
     # Lot ekleme balance'lara bağlı, multi-warehouse'tan sonra çalışmalı

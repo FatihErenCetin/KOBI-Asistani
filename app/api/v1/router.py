@@ -9,6 +9,7 @@ from app.api.v1 import (
     dashboard,
     finance,
     lot_actions,
+    marketplace,
     mock_cargo,
     orders,
     products,
@@ -36,3 +37,4 @@ api_router.include_router(dashboard.router)
 api_router.include_router(mock_cargo.router)
 api_router.include_router(chat.router)
 api_router.include_router(social.router)
+api_router.include_router(marketplace.router)

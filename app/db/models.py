@@ -168,6 +168,10 @@ class AdminUser(Base):
         BigInteger, nullable=True, index=True
     )
     briefing_enabled: Mapped[bool] = mapped_column(default=False)
+    # Marketplace komşu önerileri için KOBİ konumu
+    city: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    district: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    preferred_carrier: Mapped[str | None] = mapped_column(String(60), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
@@ -181,6 +185,13 @@ class Supplier(Base):
     email: Mapped[str | None] = mapped_column(String(120), nullable=True)
     address: Mapped[str | None] = mapped_column(String(300), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Marketplace: kategori, kargo şirketi, konum (komşu eşleşme + filtre için)
+    category: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
+    carrier: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
+    city: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    district: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    rating: Mapped[float | None] = mapped_column(Float, nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -590,3 +601,167 @@ class TelegramSession(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
+
+
+# ============================================================================
+# Marketplace — Tedarikçi pazarı, satınalma siparişleri, komşu KOBİ önerileri
+# ============================================================================
+
+
+class PurchaseOrderStatus(str, enum.Enum):
+    """Tedarikçiye verilen sipariş yaşam döngüsü."""
+
+    DRAFT = "draft"
+    SENT = "sent"
+    CONFIRMED = "confirmed"
+    RECEIVED = "received"
+    CANCELLED = "cancelled"
+
+
+class PurchaseOrder(Base):
+    """KOBİ'nin bir tedarikçiye verdiği satınalma siparişi (inbound).
+
+    Order (müşteri siparişi) modelinin tersi — burada KOBİ alıcı, supplier satıcı.
+    RECEIVED durumuna geçince her item için StockMovement.PURCHASE yazılır
+    ve toplam stok artar.
+    """
+
+    __tablename__ = "purchase_orders"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    supplier_id: Mapped[int] = mapped_column(
+        ForeignKey("suppliers.id", ondelete="RESTRICT"), index=True
+    )
+    status: Mapped[PurchaseOrderStatus] = mapped_column(
+        Enum(PurchaseOrderStatus, name="purchase_order_status"),
+        default=PurchaseOrderStatus.DRAFT,
+        index=True,
+    )
+    total_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    expected_delivery: Mapped[date | None] = mapped_column(Date, nullable=True)
+    received_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    ai_suggested: Mapped[bool] = mapped_column(default=False, index=True)
+    suggestion_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_by_admin_id: Mapped[int | None] = mapped_column(
+        ForeignKey("admin_users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    supplier: Mapped["Supplier"] = relationship()
+    items: Mapped[list["PurchaseOrderItem"]] = relationship(
+        back_populates="purchase_order",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+
+class PurchaseOrderItem(Base):
+    __tablename__ = "purchase_order_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    purchase_order_id: Mapped[int] = mapped_column(
+        ForeignKey("purchase_orders.id", ondelete="CASCADE"), index=True
+    )
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.id", ondelete="RESTRICT"), index=True
+    )
+    quantity: Mapped[float] = mapped_column(Float)
+    unit_cost: Mapped[float] = mapped_column(Float)
+
+    purchase_order: Mapped["PurchaseOrder"] = relationship(back_populates="items")
+    product: Mapped["Product"] = relationship()
+
+
+class NearbyShop(Base):
+    """Mock multi-tenant — yakın KOBİ. Demo amaçlı seed verisi.
+
+    Gerçek multi-tenant olmadığı için "diğer KOBİ'lerin satınalmaları" bu tablodan.
+    Hackathon scope'unda bu yeterli; production'da AdminUser/Organization ile
+    aynı yapı olur, query farklı.
+    """
+
+    __tablename__ = "nearby_shops"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    shop_type: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    city: Mapped[str] = mapped_column(String(80), index=True)
+    district: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    distance_km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    preferred_carrier: Mapped[str | None] = mapped_column(
+        String(60), nullable=True, index=True
+    )
+    is_active: Mapped[bool] = mapped_column(default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    purchases: Mapped[list["NearbyShopPurchase"]] = relationship(
+        back_populates="shop", cascade="all, delete-orphan"
+    )
+
+
+class NearbyShopPurchase(Base):
+    """Komşu KOBİ'nin tarihsel satınalmaları — AI advisor için sinyal kaynağı."""
+
+    __tablename__ = "nearby_shop_purchases"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    shop_id: Mapped[int] = mapped_column(
+        ForeignKey("nearby_shops.id", ondelete="CASCADE"), index=True
+    )
+    supplier_id: Mapped[int | None] = mapped_column(
+        ForeignKey("suppliers.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    product_name: Mapped[str] = mapped_column(String(120), index=True)
+    product_category: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    quantity: Mapped[float] = mapped_column(Float)
+    unit_cost: Mapped[float] = mapped_column(Float)
+    carrier: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    purchased_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, index=True
+    )
+
+    shop: Mapped["NearbyShop"] = relationship(back_populates="purchases")
+    supplier: Mapped["Supplier | None"] = relationship()
+
+
+class MarketplaceRecommendation(Base):
+    """AI advisor'ın ürettiği komşu trend bazlı satınalma önerisi.
+
+    Cron job ile günlük üretilir, admin panelde gösterilir, dismiss veya
+    apply (purchase order'a çevirme) eylemleri var.
+    """
+
+    __tablename__ = "marketplace_recommendations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int | None] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    product_name: Mapped[str] = mapped_column(String(120), index=True)
+    suggested_supplier_id: Mapped[int | None] = mapped_column(
+        ForeignKey("suppliers.id", ondelete="SET NULL"), nullable=True
+    )
+    suggested_quantity: Mapped[float] = mapped_column(Float)
+    estimated_unit_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    confidence: Mapped[float] = mapped_column(Float, default=0.5)
+    # Neden öneri: "Aynı kargoyu kullanan 3 komşu KOBİ son 14 günde aldı"
+    reasoning: Mapped[str] = mapped_column(String(800))
+    nearby_signal_count: Mapped[int] = mapped_column(default=0)
+    status: Mapped[str] = mapped_column(
+        String(20), default="active", index=True
+    )  # active | dismissed | applied
+    applied_purchase_order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("purchase_orders.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, index=True
+    )
+
+    suggested_supplier: Mapped["Supplier | None"] = relationship()
+    product: Mapped["Product | None"] = relationship()

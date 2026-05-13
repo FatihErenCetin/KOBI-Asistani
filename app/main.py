@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.logging import setup_logging
 from app.db.session import SessionLocal
 from app.jobs.cargo_advance import advance_active_shipments
+from app.jobs.marketplace_reorder import run_marketplace_analysis
 from app.jobs.stock_forecast import run_forecast_job
 from app.services.morning_briefing import send_briefings
 from app.services.proactive_risk_scanner import scan_and_report
@@ -58,6 +59,15 @@ async def lifespan(app: FastAPI):
             id="stock_forecast",
             replace_existing=True,
         )
+
+    # Marketplace komşu trend analizi — her gün 08:30
+    scheduler.add_job(
+        run_marketplace_analysis,
+        CronTrigger(hour=8, minute=30),
+        id="marketplace_reorder",
+        replace_existing=True,
+    )
+
     scheduler.start()
     yield
     if scheduler:
