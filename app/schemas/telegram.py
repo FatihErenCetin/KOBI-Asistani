@@ -25,6 +25,14 @@ class TelegramVoice(BaseModel):
     file_size: int | None = None
 
 
+class TelegramPhotoSize(BaseModel):
+    file_id: str
+    file_unique_id: str | None = None
+    width: int | None = None
+    height: int | None = None
+    file_size: int | None = None
+
+
 class TelegramMessage(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -35,6 +43,7 @@ class TelegramMessage(BaseModel):
     text: str | None = None
     contact: TelegramContact | None = None
     voice: TelegramVoice | None = None
+    photo: list[TelegramPhotoSize] | None = None
 
 
 class TelegramCallbackQuery(BaseModel):

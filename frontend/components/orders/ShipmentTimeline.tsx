@@ -1,3 +1,4 @@
+import type { ComponentType, ReactNode } from "react";
 import {
   Package,
   PackageCheck,
@@ -24,7 +25,7 @@ const STAGES: ShipmentStatus[] = [
   "delivered",
 ];
 
-const STAGE_ICONS: Record<ShipmentStatus, React.ComponentType<{ className?: string }>> = {
+const STAGE_ICONS: Record<ShipmentStatus, ComponentType<{ className?: string }>> = {
   label_created: Package,
   picked_up: PackageCheck,
   in_transit: Truck,

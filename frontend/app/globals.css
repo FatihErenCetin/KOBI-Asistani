@@ -1,15 +1,91 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --background: 255 255 255;
-  --foreground: 23 23 23;
+  --background: 248 250 252;
+  --foreground: 15 23 42;
 }
 
-html, body { height: 100%; }
+* {
+  box-sizing: border-box;
+}
+
+html,
 body {
-  background: rgb(var(--background));
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(16, 185, 129, 0.12), transparent 34rem),
+    radial-gradient(circle at 90% 8%, rgba(14, 165, 233, 0.10), transparent 28rem),
+    rgb(var(--background));
   color: rgb(var(--foreground));
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+::selection {
+  background: rgba(16, 185, 129, 0.22);
+}
+
+@layer components {
+  .page-wrap {
+    @apply mx-auto w-full max-w-7xl space-y-6;
+  }
+
+  .surface-card {
+    @apply rounded-3xl border border-white/70 bg-white/90 shadow-card backdrop-blur-xl;
+  }
+
+  .section-title {
+    @apply text-base font-bold tracking-tight text-slate-950;
+  }
+
+  .section-subtitle {
+    @apply text-sm leading-6 text-slate-500;
+  }
+
+  .table-shell {
+    @apply overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-card;
+  }
+
+  .table-head-row {
+    @apply bg-slate-50/90 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500;
+  }
+
+  .table-cell {
+    @apply px-5 py-4 align-middle;
+  }
+
+  .filter-pill {
+    @apply inline-flex items-center rounded-full border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-800;
+  }
+
+  .filter-pill-active {
+    @apply border-brand-600 bg-brand-600 text-white hover:border-brand-700 hover:bg-brand-700 hover:text-white;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.55);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.75);
 }

@@ -5,7 +5,6 @@ LLM dongusu max 5 iterasyon ile sinirli."""
 
 import asyncio
 import logging
-import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
@@ -19,34 +18,86 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 MAX_ITERATIONS = 5
-RATE_LIMIT_MAX_RETRIES = 3
-RATE_LIMIT_DEFAULT_WAIT = 12  # saniye, retry_delay parse edilemezse
+RATE_LIMIT_DEFAULT_WAIT = 1  # demo sırasında uzun beklememek için kısa tutuldu
 
 
-async def _generate_with_retry(client, *, model, contents, config):
-    """429 RESOURCE_EXHAUSTED yakalanirsa belirtilen sure kadar bekle ve tekrar dene."""
-    for attempt in range(RATE_LIMIT_MAX_RETRIES):
+_client_cache: dict[str, genai.Client] = {}
+_key_cursor = 0
+
+
+def _mask_key(key: str) -> str:
+    if len(key) <= 8:
+        return "****"
+    return f"{key[:4]}...{key[-4:]}"
+
+
+def _get_client_for_key(api_key: str) -> genai.Client:
+    client = _client_cache.get(api_key)
+    if client is None:
+        client = genai.Client(api_key=api_key)
+        _client_cache[api_key] = client
+    return client
+
+
+def _get_api_keys() -> list[str]:
+    keys = settings.gemini_api_keys_list
+    if not keys:
+        raise RuntimeError("GEMINI_API_KEY or GEMINI_API_KEYS not set")
+    return keys
+
+
+async def generate_content_with_fallback(
+    *,
+    contents,
+    config=None,
+    model: str | None = None,
+    log_context: str = "Gemini",
+):
+    """Gemini çağrısını çoklu API key fallback ile çalıştırır.
+
+    Kullanım mantığı:
+    - Tek key varsa normal çağrı yapar.
+    - Bir key 429/rate limit verirse beklemeden sıradaki key'e geçer.
+    - Bütün key'ler limit yerse kısa bir bekleme sonrası son hatayı döndürür.
+    Bu yapı demo sırasında uzun beklemeyi ve tek key'e bağımlılığı azaltır.
+    """
+    global _key_cursor
+
+    keys = _get_api_keys()
+    selected_model = model or settings.GEMINI_MODEL
+    last_error: Exception | None = None
+
+    start = _key_cursor % len(keys)
+    for offset in range(len(keys)):
+        idx = (start + offset) % len(keys)
+        key = keys[idx]
+        client = _get_client_for_key(key)
         try:
-            return await client.aio.models.generate_content(
-                model=model, contents=contents, config=config
+            response = await client.aio.models.generate_content(
+                model=selected_model,
+                contents=contents,
+                config=config,
             )
+            _key_cursor = (idx + 1) % len(keys)
+            return response
         except genai_errors.ClientError as e:
-            if getattr(e, "code", None) != 429:
-                raise
-            wait_s = RATE_LIMIT_DEFAULT_WAIT
-            msg = str(e)
-            m = re.search(r"'?retryDelay'?\s*:\s*'?(\d+)", msg)
-            if m:
-                wait_s = min(int(m.group(1)) + 1, 60)
-            logger.warning(
-                "Gemini 429, attempt %d/%d, waiting %ds",
-                attempt + 1, RATE_LIMIT_MAX_RETRIES, wait_s,
-            )
-            await asyncio.sleep(wait_s)
-    # Tum retry'lar tukendi - bir kez daha dene, bu sefer hata propagate olsun
-    return await client.aio.models.generate_content(
-        model=model, contents=contents, config=config
-    )
+            last_error = e
+            if getattr(e, "code", None) == 429:
+                logger.warning(
+                    "%s 429/rate limit on key %s, trying next key (%d/%d)",
+                    log_context,
+                    _mask_key(key),
+                    offset + 1,
+                    len(keys),
+                )
+                continue
+            raise
+
+    logger.warning("%s all Gemini keys are rate limited, waiting %ds", log_context, RATE_LIMIT_DEFAULT_WAIT)
+    await asyncio.sleep(RATE_LIMIT_DEFAULT_WAIT)
+    if last_error:
+        raise last_error
+    raise RuntimeError("Gemini request failed")
 
 
 @dataclass
@@ -61,18 +112,6 @@ class ToolSpec:
 class LLMResponse:
     text: str
     tool_calls_made: list[dict]
-
-
-_client: genai.Client | None = None
-
-
-def _get_client() -> genai.Client:
-    global _client
-    if _client is None:
-        if not settings.GEMINI_API_KEY:
-            raise RuntimeError("GEMINI_API_KEY not set")
-        _client = genai.Client(api_key=settings.GEMINI_API_KEY)
-    return _client
 
 
 def _dict_to_schema(d: dict) -> types.Schema:
@@ -133,7 +172,6 @@ async def run_agent_loop(
     history: onceki kullanici/model mesajlari, [{role, parts}] formati
     extra_context: tool handler'lara gecilen ekstra (orn ctx)
     """
-    client = _get_client()
     tool_object = _build_tool_object(tools) if tools else None
 
     contents: list[types.Content] = []
@@ -154,11 +192,11 @@ async def run_agent_loop(
     tool_calls_made: list[dict] = []
 
     for _ in range(MAX_ITERATIONS):
-        response = await _generate_with_retry(
-            client,
+        response = await generate_content_with_fallback(
             model=settings.GEMINI_MODEL,
             contents=contents,
             config=config,
+            log_context="Panel/agent",
         )
 
         function_calls = response.function_calls or []

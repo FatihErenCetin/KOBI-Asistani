@@ -11,25 +11,27 @@ interface Row {
 
 export function TodaysShipments({ rows }: { rows: Row[] }) {
   return (
-    <section className="bg-white border border-slate-200 rounded-lg p-5">
-      <h2 className="font-semibold mb-3">Bugün Teslim Edilecekler</h2>
-      {rows.length === 0 && <p className="text-sm text-slate-500">Bugün için kargo yok.</p>}
-      <ul className="space-y-3">
-        {rows.map((s) => (
-          <li key={s.tracking_no} className="text-sm flex flex-col gap-1">
-            <div className="flex justify-between">
-              <span className="font-medium">#{s.order_id} • {s.customer_name}</span>
-              <span className={`px-2 py-0.5 rounded text-xs ${statusColor(s.status)}`}>
-                {statusLabel(s.status)}
-              </span>
-            </div>
-            <div className="text-slate-500">
-              {s.current_location ?? "—"} • ETA {formatDate(s.eta)}
-            </div>
-          </li>
-        ))}
-      </ul>
+    <section className="surface-card overflow-hidden">
+      <header className="border-b border-slate-100 px-5 py-4">
+        <h2 className="section-title">Bugün Teslim Edilecekler</h2>
+      </header>
+      {rows.length === 0 ? (
+        <p className="px-5 py-8 text-center text-sm font-medium text-slate-400">Bugün için kargo yok.</p>
+      ) : (
+        <ul className="divide-y divide-slate-100">
+          {rows.map((s) => (
+            <li key={s.tracking_no} className="px-5 py-4 text-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-bold text-slate-950">#{s.order_id} · {s.customer_name}</p>
+                  <p className="mt-1 text-xs font-medium text-slate-500">{s.current_location ?? "-"} · ETA {formatDate(s.eta)}</p>
+                </div>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${statusColor(s.status)}`}>{statusLabel(s.status)}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
-

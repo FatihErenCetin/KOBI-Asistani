@@ -45,9 +45,18 @@ export const api = {
   listCustomers: (search?: string) =>
     request<any[]>(`/customers${search ? `?search=${encodeURIComponent(search)}` : ""}`),
   customerOrders: (id: number) => request<any[]>(`/customers/${id}/orders`),
+
+  carrierPerformance: (sinceDays = 30) =>
+    request<any>(`/carriers/performance?since_days=${sinceDays}`),
+  carrierRisks: () => request<any>("/carriers/risks"),
   panelChat: (message: string, history?: any[]) =>
     request<{ text: string; data: any | null }>("/panel/chat", {
       method: "POST",
       body: JSON.stringify({ message, history }),
+    }),
+  sendSupplierMail: (payload: { subject: string; body: string }) =>
+    request<{ ok: boolean; to: string; subject: string; message_id?: string }>("/panel/supplier-mail", {
+      method: "POST",
+      body: JSON.stringify(payload),
     }),
 };

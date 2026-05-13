@@ -7,9 +7,7 @@ from app.agents import coordinator
 from app.api.deps import get_db
 from app.core import identity
 from app.core.config import settings
-import json as _json
 from app.core.stt import transcribe_voice
-from app.core.vision import identify_product_from_photo
 from app.db.session import SessionLocal
 from app.integrations.telegram_client import telegram_client
 from app.schemas.telegram import TelegramUpdate
@@ -55,14 +53,7 @@ async def telegram_inbound(
         )
         return {"ok": True}
 
-    # Fotograf - Gemini Vision ile urun tanimla
-    if msg.photo:
-        # En yuksek cozunurluklu fotografi al
-        photo = msg.photo[-1]
-        bg.add_task(_process_photo, tg_user_id, photo.file_id)
-        return {"ok": True}
-
-    # Sesli mesaj - Groq Whisper ile transkribe et
+    # Sesli mesaj - Gemini Audio ile transkribe et
     if msg.voice:
         bg.add_task(_process_voice, tg_user_id, msg.voice.file_id)
         return {"ok": True}
@@ -88,82 +79,6 @@ async def _process_contact(tg_user_id: int, phone: str, first_name: str):
         )
     except Exception:
         logger.exception("send_message failed in _process_contact")
-
-
-async def _process_photo(tg_user_id: int, file_id: str):
-    """Fotograftaki urunu Gemini Vision ile tanimla, session'a kaydet, miktar sor."""
-    try:
-        await telegram_client.send_chat_action(tg_user_id, "typing")
-    except Exception:
-        pass
-
-    try:
-        await telegram_client.send_message(tg_user_id, "📸 Fotoğrafınızı inceliyorum...")
-    except Exception:
-        pass
-
-    # Mevcut urunleri DB'den cek
-    async with SessionLocal() as db:
-        from sqlalchemy import select
-        from app.db.models import Product, TelegramSession
-        res = await db.execute(select(Product.name))
-        product_names = [row[0] for row in res.fetchall()]
-
-    try:
-        result = await identify_product_from_photo(file_id, product_names)
-    except Exception:
-        logger.exception("Vision identification failed for tg=%s", tg_user_id)
-        try:
-            await telegram_client.send_message(
-                tg_user_id,
-                "Fotoğrafı analiz edemedim, ürün adını yazarak belirtir misiniz?",
-            )
-        except Exception:
-            pass
-        return
-
-    if not result.get("identified") or not result.get("product_name"):
-        desc = result.get("description", "")
-        try:
-            await telegram_client.send_message(
-                tg_user_id,
-                "📸 " + desc + "\n\nHangi ürünü sipariş etmek istediğinizi yazarak belirtir misiniz?",
-            )
-        except Exception:
-            pass
-        return
-
-    product_name = result["product_name"]
-    confidence = result.get("confidence", "medium")
-    description = result.get("description", "")
-    confidence_emoji = {"high": "✅", "medium": "🔍", "low": "❓"}.get(confidence, "🔍")
-
-    # Urun adini session'a kaydet, kullanici miktar yazinca birlestirecegiz
-    async with SessionLocal() as db:
-        from sqlalchemy import select
-        from app.db.models import TelegramSession
-        res = await db.execute(
-            select(TelegramSession).where(TelegramSession.telegram_user_id == tg_user_id)
-        )
-        session = res.scalar_one_or_none()
-        if session is None:
-            session = TelegramSession(telegram_user_id=tg_user_id)
-            db.add(session)
-        # pending_intent'e urun bilgisini kaydet
-        session.pending_intent = _json.dumps({
-            "type": "photo_product",
-            "product_name": product_name,
-        })
-        await db.commit()
-
-    try:
-        await telegram_client.send_message(
-            tg_user_id,
-            confidence_emoji + " Fotoğrafta " + product_name + " gördüm.\n"
-            + description + "\n\nNe kadar sipariş vermek istersiniz? (örn: 3 kilo)",
-        )
-    except Exception:
-        pass
 
 
 async def _process_voice(tg_user_id: int, file_id: str):
@@ -222,25 +137,6 @@ async def _process_voice(tg_user_id: int, file_id: str):
 
 async def _process_text(tg_user_id: int, text: str):
     async with SessionLocal() as db:
-        # Photo session kontrolu: onceki fotograf mesajinda urun tanimlandi mi?
-        from sqlalchemy import select as _select
-        from app.db.models import TelegramSession as _TelegramSession
-        sess_res = await db.execute(
-            _select(_TelegramSession).where(_TelegramSession.telegram_user_id == tg_user_id)
-        )
-        session = sess_res.scalar_one_or_none()
-        if session and session.pending_intent:
-            try:
-                intent = _json.loads(session.pending_intent)
-                if intent.get("type") == "photo_product":
-                    product_name = intent["product_name"]
-                    text = text.strip() + " " + product_name + " istiyorum"
-                    session.pending_intent = None
-                    await db.flush()
-                    logger.info("Photo session merged: %s", text)
-            except Exception:
-                pass
-
         customer = await identity.resolve_by_telegram(db, tg_user_id)
         if customer is None:
             try:

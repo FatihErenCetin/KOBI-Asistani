@@ -8,13 +8,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Order, OrderStatus, Shipment, ShipmentStatus
 
 LOCATIONS = [
-    "Ankara Aktarma",
-    "Istanbul Anadolu Subesi",
-    "Istanbul Avrupa Subesi",
-    "Izmir Dagitim",
-    "Bursa Subesi",
-    "Adana Aktarma",
-    "Antalya Subesi",
+    "Ankara Aktarma Merkezi",
+    "İstanbul Anadolu Şubesi",
+    "İstanbul Avrupa Transfer Merkezi",
+    "İzmir Dağıtım Merkezi",
+    "Bursa Nilüfer Şubesi",
+    "Adana Aktarma Merkezi",
+    "Antalya Şubesi",
+]
+
+CARRIERS = [
+    "Anadolu Kargo",
+    "Marmara Kurye",
+    "Koop Lojistik",
+    "Hızlı Teslimat",
 ]
 
 STATE_ORDER = [
@@ -41,13 +48,18 @@ async def create_shipment(db: AsyncSession, order: Order) -> Shipment:
     existing = await _existing_shipment_for_order(db, order.id)
     if existing is not None:
         return existing
+
+    now = datetime.utcnow()
+    created_at = order.created_at or now
+    eta = order.promised_delivery or (created_at + timedelta(days=random.randint(2, 4))).date()
+
     shipment = Shipment(
         order_id=order.id,
         tracking_no=_generate_tracking_no(),
-        carrier="MockKargo",
+        carrier=random.choice(CARRIERS),
         status=ShipmentStatus.LABEL_CREATED,
-        last_event_at=datetime.utcnow(),
-        estimated_delivery=date.today() + timedelta(days=random.randint(1, 3)),
+        last_event_at=max(created_at + timedelta(hours=4), now - timedelta(hours=random.randint(2, 18))),
+        estimated_delivery=eta,
         current_location=random.choice(LOCATIONS),
     )
     db.add(shipment)
@@ -56,10 +68,7 @@ async def create_shipment(db: AsyncSession, order: Order) -> Shipment:
 
 
 async def advance(db: AsyncSession, shipment: Shipment) -> Shipment:
-    """Durumu bir adim ilerlet. DELIVERED ise no-op.
-
-    Order'a lazy-loadla erismek async'te hata ureteceginden order'i id ile cekiyoruz.
-    """
+    """Durumu bir adim ilerlet. DELIVERED ise no-op."""
     try:
         idx = STATE_ORDER.index(shipment.status)
     except ValueError:

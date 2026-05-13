@@ -1,3 +1,4 @@
+import type { ComponentType, ReactNode } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -118,10 +119,10 @@ function KpiCard({
   tone = "slate",
   emphasis = false,
 }: {
-  icon: React.ComponentType<{ className?: string }>;
+  icon: ComponentType<{ className?: string }>;
   label: string;
-  value: React.ReactNode;
-  hint?: React.ReactNode;
+  value: ReactNode;
+  hint?: ReactNode;
   tone?: "slate" | "brand" | "indigo" | "amber";
   emphasis?: boolean;
 }) {

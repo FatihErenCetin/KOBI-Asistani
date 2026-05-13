@@ -1,3 +1,4 @@
+import type { ComponentType, ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -61,9 +62,9 @@ function MetaItem({
   value,
   emphasis = false,
 }: {
-  icon: React.ComponentType<{ className?: string }>;
+  icon: ComponentType<{ className?: string }>;
   label: string;
-  value: React.ReactNode;
+  value: ReactNode;
   emphasis?: boolean;
 }) {
   return (

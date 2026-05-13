@@ -47,7 +47,9 @@ async def list_customer_orders(
 ):
     c = await customers_crud.get_by_id(db, customer_id)
     if c is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Customer not found")
+        # Demo ortamında seed tekrarlandığında eski sekmelerde kalan müşteri id'leri
+        # 404 üretmesin; frontend boş durum ekranını gösterebilsin.
+        return []
     orders = await orders_crud.list_orders(db, customer_id=customer_id, limit=100)
     return [
         OrderOut(

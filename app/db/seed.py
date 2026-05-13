@@ -1,8 +1,9 @@
-"""Demo verisi uretici. `python -m app.db.seed --demo-fixtures` ile calistir."""
+"""Gercekci demo verisi uretici. `python -m app.db.seed --clear --demo-fixtures` ile calistir."""
 
 import argparse
 import asyncio
 import random
+import string
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import delete, text
@@ -18,39 +19,39 @@ from app.db.models import (
     TelegramSession,
 )
 from app.db.session import SessionLocal
-from app.integrations import cargo_mock
+from app.integrations.cargo_mock import CARRIERS, LOCATIONS
 
 PRODUCT_CATALOG = [
-    ("Bal", "cicek bali,suzme bal", "kg", 280.0, 8.0, 10.0, "Cam kavanozda dogal cicek bali"),
-    ("Zeytinyagi", "zeytin yagi,naturel sizma", "lt", 320.0, 25.0, 10.0, "Erken hasat"),
-    ("Domates", "salkim domates,kuru domates", "kg", 18.0, 50.0, 30.0, "Yerli salkim"),
-    ("Biber", "yesil biber,sivri biber", "kg", 22.0, 30.0, 15.0, "Sivri yesil biber"),
-    ("Salca", "domates salcasi,biber salcasi", "kg", 75.0, 40.0, 15.0, "Ev yapimi salca"),
-    ("Recel", "kayisi receli,visne receli", "kg", 110.0, 18.0, 10.0, "Sekersiz alternatif mevcut"),
-    ("Peynir", "beyaz peynir,kasar", "kg", 240.0, 22.0, 10.0, "Tam yagli inek"),
-    ("Yogurt", "suzme yogurt,kaymakli", "kg", 60.0, 35.0, 15.0, "Tam yagli"),
-    ("Tereyagi", "koy tereyagi", "kg", 380.0, 12.0, 8.0, "Tuzsuz"),
-    ("Yumurta", "koy yumurtasi", "adet", 7.0, 200.0, 60.0, "Gezen tavuk"),
-    ("Un", "tam bugday unu", "kg", 25.0, 60.0, 30.0, "Tam bugday"),
-    ("Bulgur", "kepekli bulgur", "kg", 35.0, 40.0, 20.0, "Pilavlik"),
-    ("Mercimek", "kirmizi mercimek,yesil mercimek", "kg", 45.0, 35.0, 15.0, "Yerli"),
+    ("Bal", "çiçek balı,cicek bali,süzme bal,suzme bal,doğal bal,dogal bal", "kg", 280.0, 8.0, 10.0, "Cam kavanozda doğal çiçek balı"),
+    ("Zeytinyağı", "zeytinyagi,zeytin yağı,zeytin yagi,naturel sızma,naturel sizma", "lt", 320.0, 25.0, 10.0, "Erken hasat"),
+    ("Domates", "salkım domates,salkim domates,kuru domates", "kg", 18.0, 50.0, 30.0, "Yerli salkım"),
+    ("Biber", "yeşil biber,yesil biber,sivri biber", "kg", 22.0, 30.0, 15.0, "Sivri yeşil biber"),
+    ("Salça", "salca,domates salçası,domates salcasi,biber salçası,biber salcasi", "kg", 75.0, 40.0, 15.0, "Ev yapımı salça"),
+    ("Reçel", "recel,kayısı reçeli,kayisi receli,vişne reçeli,visne receli", "kg", 110.0, 18.0, 10.0, "Şekersiz alternatif mevcut"),
+    ("Peynir", "beyaz peynir,kaşar,kasar", "kg", 240.0, 22.0, 10.0, "Tam yağlı inek peyniri"),
+    ("Yoğurt", "yogurt,süzme yoğurt,suzme yogurt,kaymaklı,kaymakli", "kg", 60.0, 35.0, 15.0, "Tam yağlı"),
+    ("Tereyağı", "tereyagi,köy tereyağı,koy tereyagi,tuzsuz tereyağı,tuzsuz tereyagi", "kg", 380.0, 12.0, 8.0, "Tuzsuz"),
+    ("Yumurta", "köy yumurtası,koy yumurtasi,gezen tavuk yumurtası,gezen tavuk yumurtasi", "adet", 7.0, 200.0, 60.0, "Gezen tavuk"),
+    ("Un", "tam buğday unu,tam bugday unu", "kg", 25.0, 60.0, 30.0, "Tam buğday"),
+    ("Bulgur", "kepekli bulgur,pilavlık bulgur,pilavlik bulgur", "kg", 35.0, 40.0, 20.0, "Pilavlık"),
+    ("Mercimek", "kırmızı mercimek,kirmizi mercimek,yeşil mercimek,yesil mercimek", "kg", 45.0, 35.0, 15.0, "Yerli"),
     ("Nohut", "iri nohut", "kg", 40.0, 30.0, 15.0, ""),
-    ("Fasulye", "kuru fasulye", "kg", 80.0, 25.0, 12.0, "Ispir tipi"),
-    ("Pirinc", "baldo pirinc", "kg", 55.0, 40.0, 15.0, ""),
-    ("Ceviz", "ic ceviz", "kg", 320.0, 14.0, 6.0, "Yeni hasat"),
-    ("Findik", "ic findik", "kg", 380.0, 10.0, 5.0, ""),
-    ("Kuru Uzum", "sultaniye", "kg", 95.0, 18.0, 8.0, ""),
-    ("Kuru Incir", "kuru incir", "kg", 180.0, 12.0, 5.0, ""),
-    ("Pekmez", "uzum pekmezi,dut pekmezi", "kg", 130.0, 20.0, 10.0, ""),
-    ("Tarhana", "ev tarhanasi", "kg", 95.0, 14.0, 6.0, ""),
-    ("Sirke", "uzum sirkesi,elma sirkesi", "lt", 65.0, 25.0, 10.0, ""),
-    ("Susam Yagi", "tahin", "kg", 220.0, 18.0, 8.0, ""),
+    ("Fasulye", "kuru fasulye,ispir fasulyesi", "kg", 80.0, 25.0, 12.0, "İspir tipi"),
+    ("Pirinç", "pirinc,baldo pirinç,baldo pirinc", "kg", 55.0, 40.0, 15.0, ""),
+    ("Ceviz", "iç ceviz,ic ceviz", "kg", 320.0, 14.0, 6.0, "Yeni hasat"),
+    ("Fındık", "findik,iç fındık,ic findik", "kg", 380.0, 10.0, 5.0, ""),
+    ("Kuru Üzüm", "kuru uzum,üzüm,uzum,sultaniye", "kg", 95.0, 18.0, 8.0, ""),
+    ("Kuru İncir", "kuru incir,incir", "kg", 180.0, 12.0, 5.0, ""),
+    ("Pekmez", "üzüm pekmezi,uzum pekmezi,dut pekmezi", "kg", 130.0, 20.0, 10.0, ""),
+    ("Tarhana", "ev tarhanası,ev tarhanasi", "kg", 95.0, 14.0, 6.0, ""),
+    ("Sirke", "üzüm sirkesi,uzum sirkesi,elma sirkesi", "lt", 65.0, 25.0, 10.0, ""),
+    ("Susam Yağı", "susam yagi,susam yağı,tahin", "kg", 220.0, 18.0, 8.0, ""),
     ("Kekik", "kuru kekik", "kg", 280.0, 5.0, 2.0, ""),
     ("Reyhan", "kuru reyhan", "kg", 240.0, 4.0, 2.0, ""),
-    ("Yag", "ayciceg yagi", "lt", 95.0, 30.0, 12.0, ""),
-    ("Cay", "siyah cay", "kg", 280.0, 20.0, 10.0, "Rize"),
-    ("Sabun", "zeytinyagli sabun", "adet", 35.0, 80.0, 30.0, ""),
-    ("Kolonya", "limon kolonyasi", "lt", 110.0, 20.0, 8.0, ""),
+    ("Yağ", "yag,ayçiçek yağı,aycicek yagi,sıvı yağ,sivi yag", "lt", 95.0, 30.0, 12.0, ""),
+    ("Çay", "cay,siyah çay,siyah cay,rize çayı,rize cayi", "kg", 280.0, 20.0, 10.0, "Rize"),
+    ("Sabun", "zeytinyağlı sabun,zeytinyagli sabun", "adet", 35.0, 80.0, 30.0, ""),
+    ("Kolonya", "limon kolonyası,limon kolonyasi", "lt", 110.0, 20.0, 8.0, ""),
 ]
 
 CUSTOMER_NAMES = [
@@ -69,9 +70,24 @@ CUSTOMER_NAMES = [
 random.seed(42)
 
 
+def _tracking_no() -> str:
+    suffix = "".join(random.choices(string.ascii_uppercase + string.digits, k=10))
+    return f"TR{suffix}"
+
+
 async def clear_all(db) -> None:
-    for model in [Shipment, OrderItem, Order, Product, Customer, TelegramSession]:
-        await db.execute(delete(model))
+    """Demo verisini temizler ve id sayaçlarını sıfırlar.
+
+    Önceki sürüm DELETE kullandığı için PostgreSQL sequence değerleri artmaya
+    devam ediyordu. Birkaç kez seed çalıştırınca müşteri id'leri 101, 151 gibi
+    değerlere kayıyor; eski frontend linkleri de 404 üretebiliyordu.
+    """
+    await db.execute(
+        text(
+            "TRUNCATE TABLE shipments, order_items, orders, products, "
+            "customers, telegram_sessions RESTART IDENTITY CASCADE"
+        )
+    )
     await db.commit()
 
 
@@ -105,62 +121,139 @@ async def seed_customers(db) -> list[Customer]:
     return customers
 
 
-async def seed_orders(db, customers: list[Customer], products: list[Product], total: int = 200):
-    now = datetime.utcnow()
-    status_dist = (
-        [OrderStatus.DELIVERED] * 60
-        + [OrderStatus.SHIPPED] * 15
-        + [OrderStatus.PREPARED] * 15
-        + [OrderStatus.PENDING] * 10
+async def _add_items(db, order: Order, item_list: list[tuple[Product, float]]) -> None:
+    for p, q in item_list:
+        db.add(OrderItem(order_id=order.id, product_id=p.id, quantity=q, unit_price=p.price))
+    await db.flush()
+
+
+async def _add_shipment(
+    db,
+    order: Order,
+    *,
+    status: ShipmentStatus,
+    carrier: str | None = None,
+    last_event_at: datetime | None = None,
+    estimated_delivery: date | None = None,
+    location: str | None = None,
+) -> Shipment:
+    shipment = Shipment(
+        order_id=order.id,
+        tracking_no=_tracking_no(),
+        carrier=carrier or random.choice(CARRIERS),
+        status=status,
+        last_event_at=last_event_at or datetime.utcnow(),
+        estimated_delivery=estimated_delivery or order.promised_delivery,
+        current_location=location or ("Teslim edildi" if status == ShipmentStatus.DELIVERED else random.choice(LOCATIONS)),
     )
+    db.add(shipment)
+    await db.flush()
+    return shipment
+
+
+async def _create_order(
+    db,
+    *,
+    customer: Customer,
+    items: list[tuple[Product, float]],
+    status: OrderStatus,
+    created_at: datetime,
+    promised_delivery: date | None = None,
+    order_id: int | None = None,
+    note: str | None = None,
+) -> Order:
+    total = round(sum(p.price * q for p, q in items), 2)
+    kwargs = {}
+    if order_id is not None:
+        kwargs["id"] = order_id
+    order = Order(
+        **kwargs,
+        customer_id=customer.id,
+        status=status,
+        total=total,
+        created_at=created_at,
+        promised_delivery=promised_delivery or (created_at + timedelta(days=random.randint(2, 4))).date(),
+        note=note,
+    )
+    db.add(order)
+    await db.flush()
+    await _add_items(db, order, items)
+    return order
+
+
+async def seed_orders(db, customers: list[Customer], products: list[Product], total: int = 200):
+    """Gecmis siparisleri gercekci dagitir.
+
+    Eski siparisler cogunlukla teslim edildi olur. Bekleyen/hazirlanan siparisler son birkac gune aittir.
+    Bu sayede demo ekraninda 3 ay once hazirlanmis siparis gibi mantiksiz kayitlar gorunmez.
+    """
+    now = datetime.utcnow()
+    status_pool = (
+        [OrderStatus.DELIVERED] * 145
+        + [OrderStatus.SHIPPED] * 18
+        + [OrderStatus.PREPARED] * 18
+        + [OrderStatus.PENDING] * 14
+        + [OrderStatus.CANCELLED] * 5
+    )
+
     for _ in range(total):
         c = random.choice(customers)
-        n_items = random.randint(1, 5)
-        chosen = random.sample(products, n_items)
+        chosen = random.sample(products, random.randint(1, 4))
         items = []
-        order_total = 0.0
         for p in chosen:
-            qty = (
-                round(random.uniform(0.5, 5.0), 1)
-                if p.unit != "adet"
-                else random.randint(1, 10)
-            )
+            qty = round(random.uniform(0.5, 5.0), 1) if p.unit != "adet" else random.randint(1, 10)
             items.append((p, float(qty)))
-            order_total += p.price * qty
-        days_ago = random.randint(0, 89)
-        created = now - timedelta(days=days_ago, hours=random.randint(0, 23))
-        status = random.choice(status_dist)
-        order = Order(
-            customer_id=c.id,
+
+        status = random.choice(status_pool)
+        if status == OrderStatus.DELIVERED:
+            days_ago = random.randint(5, 75)
+        elif status in (OrderStatus.SHIPPED, OrderStatus.PREPARED, OrderStatus.PENDING):
+            days_ago = random.randint(0, 4)
+        else:
+            days_ago = random.randint(2, 60)
+
+        created = now - timedelta(days=days_ago, hours=random.randint(0, 20))
+        promised = (created + timedelta(days=random.randint(2, 4))).date()
+        order = await _create_order(
+            db,
+            customer=c,
+            items=items,
             status=status,
-            total=round(order_total, 2),
             created_at=created,
-            promised_delivery=(created + timedelta(days=random.randint(1, 5))).date(),
+            promised_delivery=promised,
         )
-        db.add(order)
-        await db.flush()
-        for p, qty in items:
-            db.add(
-                OrderItem(
-                    order_id=order.id,
-                    product_id=p.id,
-                    quantity=qty,
-                    unit_price=p.price,
-                )
+
+        if status == OrderStatus.DELIVERED:
+            delivered_at = created + timedelta(days=random.randint(1, 4), hours=random.randint(1, 8))
+            if delivered_at > now:
+                delivered_at = now - timedelta(hours=random.randint(2, 12))
+            await _add_shipment(
+                db,
+                order,
+                status=ShipmentStatus.DELIVERED,
+                last_event_at=delivered_at,
+                estimated_delivery=promised,
+                location="Teslim edildi",
             )
-        if status == OrderStatus.SHIPPED:
-            shipment = await cargo_mock.create_shipment(db, order)
-            advance_count = random.randint(1, 3)
-            for _ in range(advance_count):
-                await cargo_mock.advance(db, shipment)
-            if shipment.status == ShipmentStatus.DELIVERED:
-                shipment.status = ShipmentStatus.OUT_FOR_DELIVERY
-                order.status = OrderStatus.SHIPPED
+        elif status == OrderStatus.SHIPPED:
+            ship_status = random.choice([
+                ShipmentStatus.PICKED_UP,
+                ShipmentStatus.IN_TRANSIT,
+                ShipmentStatus.OUT_FOR_DELIVERY,
+            ])
+            await _add_shipment(
+                db,
+                order,
+                status=ship_status,
+                last_event_at=now - timedelta(hours=random.randint(2, 30)),
+                estimated_delivery=max(promised, (now + timedelta(days=random.randint(1, 2))).date()),
+            )
     await db.flush()
 
 
 async def apply_demo_fixtures(db, customers: list[Customer], products: list[Product]):
-    """Demo senaryolari icin sabit veri."""
+    """Demo senaryolari icin sabit ve kontrollu veri."""
+    now = datetime.utcnow()
     ayse = next((c for c in customers if c.name == "Ayse Yilmaz"), None)
     if not ayse:
         ayse = Customer(name="Ayse Yilmaz", phone="+905550000128", telegram_user_id=99999)
@@ -170,69 +263,92 @@ async def apply_demo_fixtures(db, customers: list[Customer], products: list[Prod
         ayse.telegram_user_id = 99999
 
     bal = next(p for p in products if p.name == "Bal")
-    zeytin = next(p for p in products if p.name == "Zeytinyagi")
+    zeytin = next(p for p in products if p.name == "Zeytinyağı")
     domates = next(p for p in products if p.name == "Domates")
+    recel = next(p for p in products if p.name == "Reçel")
 
+    # Sadece Bal kritik stokta kalsin; digerleri normal gorunsun.
     bal.stock = 8.0
-    domates.stock = 49.0
+    domates.stock = 50.0
+    recel.stock = 18.0
 
-    base_date = datetime.utcnow() - timedelta(days=30)
-    fixture_orders = [
-        (base_date + timedelta(days=5), [(bal, 2.0), (zeytin, 1.0)], OrderStatus.DELIVERED),
-        (base_date + timedelta(days=12), [(bal, 1.5)], OrderStatus.DELIVERED),
-        (base_date + timedelta(days=20), [(zeytin, 2.0), (domates, 3.0)], OrderStatus.DELIVERED),
+    # Ayse Yilmaz icin temiz ve anlasilir siparis gecmisi.
+    ayse_orders = [
+        (now - timedelta(days=26), [(bal, 2.0), (zeytin, 1.0)]),
+        (now - timedelta(days=18), [(recel, 2.0)]),
+        (now - timedelta(days=10), [(zeytin, 2.0), (domates, 3.0)]),
     ]
-    for created, item_list, status in fixture_orders:
-        total = sum(p.price * q for p, q in item_list)
-        order = Order(
-            customer_id=ayse.id,
-            status=status,
-            total=round(total, 2),
+    for created, item_list in ayse_orders:
+        order = await _create_order(
+            db,
+            customer=ayse,
+            items=item_list,
+            status=OrderStatus.DELIVERED,
             created_at=created,
-            promised_delivery=(created + timedelta(days=2)).date(),
+            promised_delivery=(created + timedelta(days=3)).date(),
         )
-        db.add(order)
-        await db.flush()
-        for p, q in item_list:
-            db.add(
-                OrderItem(order_id=order.id, product_id=p.id, quantity=q, unit_price=p.price)
-            )
+        await _add_shipment(
+            db,
+            order,
+            status=ShipmentStatus.DELIVERED,
+            last_event_at=created + timedelta(days=2, hours=5),
+            estimated_delivery=(created + timedelta(days=3)).date(),
+            location="Teslim edildi",
+        )
 
     target_id = 128
     existing = await db.get(Order, target_id)
     if existing:
-        # iliskili shipment/items'i da sileceğiz
         await db.execute(delete(Shipment).where(Shipment.order_id == target_id))
         await db.execute(delete(OrderItem).where(OrderItem.order_id == target_id))
         await db.delete(existing)
         await db.flush()
-    order_128 = Order(
-        id=target_id,
-        customer_id=ayse.id,
-        status=OrderStatus.SHIPPED,
-        total=round(bal.price * 2 + zeytin.price * 1, 2),
-        created_at=datetime.utcnow() - timedelta(days=2),
-        promised_delivery=date.today() + timedelta(days=1),
-    )
-    db.add(order_128)
-    await db.flush()
-    db.add(OrderItem(order_id=order_128.id, product_id=bal.id, quantity=2.0, unit_price=bal.price))
-    db.add(
-        OrderItem(
-            order_id=order_128.id, product_id=zeytin.id, quantity=1.0, unit_price=zeytin.price
-        )
-    )
-    await db.flush()
-    shipment = await cargo_mock.create_shipment(db, order_128)
-    shipment.status = ShipmentStatus.IN_TRANSIT
-    shipment.current_location = "Istanbul Anadolu Subesi"
-    shipment.estimated_delivery = date.today() + timedelta(days=1)
-    await db.flush()
 
-    # Postgres sequence sync: explicit id=128 sequence'i ilerletmedi
-    await db.execute(
-        text("SELECT setval('orders_id_seq', (SELECT MAX(id) FROM orders))")
+    order_128 = await _create_order(
+        db,
+        order_id=target_id,
+        customer=ayse,
+        items=[(bal, 2.0), (zeytin, 1.0)],
+        status=OrderStatus.SHIPPED,
+        created_at=now - timedelta(days=2, hours=2),
+        promised_delivery=date.today() + timedelta(days=1),
+        note="Demo siparis: musteri kargo durumunu soracak.",
     )
+    await _add_shipment(
+        db,
+        order_128,
+        status=ShipmentStatus.IN_TRANSIT,
+        carrier="Marmara Kurye",
+        last_event_at=now - timedelta(hours=5),
+        estimated_delivery=date.today() + timedelta(days=1),
+        location="İstanbul Anadolu Şubesi",
+    )
+
+    # Kargo risk ekraninda makul sayida problemli kayit gorunsun diye 3 gecikmis kargo.
+    risk_customers = [c for c in customers if c.id != ayse.id][:3]
+    for idx, customer in enumerate(risk_customers):
+        created = now - timedelta(days=6 + idx)
+        product = random.choice(products)
+        order = await _create_order(
+            db,
+            customer=customer,
+            items=[(product, 1.0)],
+            status=OrderStatus.SHIPPED,
+            created_at=created,
+            promised_delivery=(date.today() - timedelta(days=1 + idx)),
+            note="Demo gecikme riski",
+        )
+        await _add_shipment(
+            db,
+            order,
+            status=ShipmentStatus.IN_TRANSIT,
+            carrier=random.choice(["Anadolu Kargo", "Koop Lojistik"]),
+            last_event_at=now - timedelta(days=2, hours=idx),
+            estimated_delivery=date.today() - timedelta(days=1 + idx),
+            location=random.choice(LOCATIONS),
+        )
+
+    await db.execute(text("SELECT setval('orders_id_seq', (SELECT MAX(id) FROM orders))"))
 
 
 async def run(demo_fixtures: bool, clear: bool):
@@ -247,10 +363,10 @@ async def run(demo_fixtures: bool, clear: bool):
         await db.commit()
     print(
         f"Seed complete: {len(PRODUCT_CATALOG)} products, "
-        f"{len(CUSTOMER_NAMES)} customers, 200+ orders"
+        f"{len(CUSTOMER_NAMES)} customers, 200+ realistic orders"
     )
     if demo_fixtures:
-        print("Demo fixtures applied: Ayse Yilmaz (tg=99999), Order #128 SHIPPED IN_TRANSIT")
+        print("Demo fixtures applied: Ayse Yilmaz, Order #128, realistic cargo risks")
 
 
 def main():

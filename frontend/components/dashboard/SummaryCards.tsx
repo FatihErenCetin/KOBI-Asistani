@@ -1,3 +1,4 @@
+import type { ComponentType, ReactNode } from "react";
 import Link from "next/link";
 import {
   TrendingUp,
@@ -51,7 +52,7 @@ function CardShell({
   label: string;
   ariaUrgent?: boolean;
   accentBar?: "none" | "amber" | "emerald" | "rose" | "slate";
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   const bar =
     accentBar === "amber"
@@ -82,7 +83,7 @@ function CardHeader({
   title,
   tone = "slate",
 }: {
-  icon: React.ComponentType<{ className?: string }>;
+  icon: ComponentType<{ className?: string }>;
   title: string;
   tone?: "slate" | "emerald" | "amber" | "rose";
 }) {
