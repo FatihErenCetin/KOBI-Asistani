@@ -21,7 +21,7 @@ export default function RegisterPage() {
 
   useEffect(() => {
     if (!authLoading && user) {
-      router.replace("/");
+      router.replace("/dashboard");
     }
   }, [authLoading, user, router]);
 
@@ -54,7 +54,8 @@ export default function RegisterPage() {
     setSubmitting(true);
     try {
       await register(trimmedEmail, password, trimmedName);
-      router.push("/dashboard");
+      // Hard navigation: login akışıyla aynı race'i önlüyor
+      window.location.href = "/dashboard";
     } catch (err: any) {
       setError(err?.message ?? "Kayıt sırasında bir hata oluştu");
       setSubmitting(false);

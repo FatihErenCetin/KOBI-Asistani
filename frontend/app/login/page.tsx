@@ -21,7 +21,7 @@ export default function LoginPage() {
   // If already signed in, bounce to dashboard
   useEffect(() => {
     if (!authLoading && user) {
-      router.replace("/");
+      router.replace("/dashboard");
     }
   }, [authLoading, user, router]);
 
@@ -45,7 +45,9 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await login(trimmedEmail, password);
-      router.push("/dashboard");
+      // Hard navigation: AuthContext yeni sayfada fresh hydrate olsun;
+      // soft push'ta state update ile AuthGuard arasında race oluşuyordu.
+      window.location.href = "/dashboard";
     } catch (err: any) {
       setError(err?.message ?? "Email veya şifre hatalı");
       setSubmitting(false);
