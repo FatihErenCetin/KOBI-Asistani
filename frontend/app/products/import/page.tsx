@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, FileUp, Loader2 } from "lucide-react";
+import { ArrowLeft, Download, FileUp, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -46,17 +46,54 @@ export default function ImportProductsPage() {
       </header>
 
       <section className="bg-white border border-slate-200 rounded-lg p-5">
-        <h2 className="font-semibold mb-2 text-sm">Beklenen kolonlar</h2>
-        <p className="text-xs text-slate-600 mb-3">
-          <code className="bg-slate-100 px-1.5 py-0.5 rounded">
-            name, unit, price, cost, stock, low_stock_threshold, barcode,
-            category, aliases, description
-          </code>
-        </p>
-        <p className="text-xs text-slate-500">
-          UTF-8 (BOM destekli). İlk satır header zorunlu. <code>name</code> boş
-          olan satırlar atlanır ve <em>skipped</em> listesinde döner.
-        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="font-semibold mb-2 text-sm">Beklenen kolonlar</h2>
+            <p className="text-xs text-slate-600 mb-3">
+              <code className="bg-slate-100 px-1.5 py-0.5 rounded">
+                name, unit, price, cost, stock, low_stock_threshold, barcode,
+                category, aliases, description
+              </code>
+            </p>
+            <p className="text-xs text-slate-500">
+              UTF-8 (BOM destekli). İlk satır header zorunlu.{" "}
+              <code>name</code> boş olan satırlar atlanır ve{" "}
+              <em>skipped</em> listesinde döner. Mevcut ürün isim eşleşmesiyle
+              güncellenir.
+            </p>
+          </div>
+          <a
+            href="/products-import-template.csv"
+            download
+            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded border border-brand-600 text-brand-700 hover:bg-brand-50"
+          >
+            <Download className="h-3.5 w-3.5" /> Örnek Şablon İndir
+          </a>
+        </div>
+        <details className="mt-3 text-xs text-slate-500">
+          <summary className="cursor-pointer hover:text-slate-700">
+            Excel'de açıp düzenleme ipuçları
+          </summary>
+          <ul className="list-disc ml-5 mt-2 space-y-1">
+            <li>
+              Excel'de dosyayı açtıktan sonra "Farklı Kaydet → CSV UTF-8
+              (virgülle ayrılmış) (*.csv)" seçeneğini kullanın.
+            </li>
+            <li>
+              Türkçe karakterler için UTF-8 zorunludur; ANSI/Windows-1254
+              kullanmayın.
+            </li>
+            <li>
+              <code>aliases</code> alanı virgülle ayrılmış birden fazla isim
+              içerebilir; bunu çift tırnak içinde yazın:{" "}
+              <code>"çiçek balı,suzme bal"</code>.
+            </li>
+            <li>
+              <code>id</code> kolonu eklerseniz o satırlar id ile bulunur ve
+              güncellenir.
+            </li>
+          </ul>
+        </details>
       </section>
 
       <section className="bg-white border border-slate-200 rounded-lg p-5">

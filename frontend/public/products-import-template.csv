@@ -1,0 +1,11 @@
+name,unit,price,cost,stock,low_stock_threshold,barcode,category,aliases,description
+Köy Yumurtası,adet,7.50,5.00,200,60,8690000000010,Gıda,koy yumurtasi,Gezen tavuk yumurtası
+Süzme Bal,kg,320.00,210.00,15,10,8690000000027,Gıda,"çiçek balı,suzme bal",Cam kavanozda doğal çiçek balı
+Naturel Zeytinyağı,lt,340.00,220.00,30,12,8690000000034,Gıda,"zeytin yağı,natural sızma",Erken hasat soğuk sıkım
+Salkım Domates,kg,22.00,14.00,55,30,,Sebze,"salkım domates,domates",Yerli salkım domates
+Ev Yapımı Tarhana,kg,110.00,72.00,18,8,,Gıda,tarhana,Geleneksel ev yapımı
+Sivri Yeşil Biber,kg,28.00,18.00,35,15,,Sebze,"sivri biber,yeşil biber",
+Beyaz Peynir,kg,280.00,182.00,22,10,8690000000058,Süt Ürünleri,beyaz peynir,Tam yağlı inek sütünden
+Köy Tereyağı,kg,420.00,275.00,12,8,8690000000065,Süt Ürünleri,tereyağı,Tuzsuz köy tereyağı
+Süzme Yoğurt,kg,75.00,48.00,40,15,,Süt Ürünleri,"yoğurt,kaymaklı yoğurt",
+Limon Kolonyası,lt,120.00,78.00,25,10,8690000000089,Bakım,kolonya,80 derece limon kolonyası
