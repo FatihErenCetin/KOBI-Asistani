@@ -4,7 +4,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import Order, OrderItem, OrderStatus, Product
+from app.db.crud import stock_movements as stock_movements_crud
+from app.db.models import Order, OrderItem, OrderStatus, Product, StockMovementReason
 
 
 async def get_by_id(db: AsyncSession, order_id: int) -> Order | None:
@@ -64,7 +65,14 @@ async def create_order(
                 unit_price=product.price,
             )
         )
-        product.stock = max(0.0, product.stock - qty)
+        await stock_movements_crud.record(
+            db,
+            product=product,
+            delta=-qty,
+            reason=StockMovementReason.SALE,
+            reference_type="order",
+            reference_id=order.id,
+        )
     await db.flush()
     return order
 
