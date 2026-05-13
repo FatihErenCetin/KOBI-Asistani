@@ -12,7 +12,7 @@ LLM hata verirse: deterministik şablon kullanılır (LLM-free fallback).
 import logging
 from datetime import datetime, timedelta
 
-from sqlalchemy import and_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -56,7 +56,6 @@ async def _llm_narrate(category: str, payload: dict) -> tuple[str, str]:
         return fallback_subject, fallback_desc
     try:
         from google import genai
-        from google.genai import types
 
         client = genai.Client(api_key=settings.GEMINI_API_KEY)
         prompt = (
@@ -148,33 +147,22 @@ async def _notify_delay_to_customer(finding: dict) -> None:
     """Kargo gecikmesi tespit edilince müşteriye Telegram özür mesajı gönder.
 
     PROACTIVE_NOTIFICATIONS_ENABLED kapalıysa hiçbir şey yapmaz. Müşterinin
-    telegram_user_id'si finding'den okunur (find_delayed_shipments dolduruyor).
+    telegram_user_id'si finding'den okunur. Mesaj artık AI ile (Gemini)
+    kişiselleştirilir; quota yoksa template'e düşer.
     """
-    if not settings.PROACTIVE_NOTIFICATIONS_ENABLED:
-        return
     tg_id = finding.get("telegram_user_id")
     if not tg_id:
         return
-    try:
-        from app.integrations.telegram_client import telegram_client
+    from app.services import shipment_notifier
 
-        order_id = finding.get("order_id")
-        days = finding.get("days_overdue", 1)
-        location = finding.get("current_location") or "yolda"
-        name = finding.get("customer_name") or "müşterimiz"
-        msg = (
-            f"Merhaba {name}, #{order_id} numaralı siparişinizin "
-            f"kargo teslim tarihi {days} gün geçti (mevcut konum: {location}). "
-            f"Gecikme için özür dileriz. Durumu yakından takip ediyoruz ve "
-            f"en kısa zamanda elinize ulaşması için kargo firmasıyla görüşüyoruz."
-        )
-        await telegram_client.send_message(tg_id, msg)
-        logger.info(
-            "Delay apology sent: tg=%s order=%s days_overdue=%s",
-            tg_id, order_id, days,
-        )
-    except Exception:
-        logger.exception("Delay notification to customer failed")
+    await shipment_notifier.notify_delay(
+        telegram_user_id=int(tg_id),
+        customer_name=finding.get("customer_name") or "müşterimiz",
+        order_id=int(finding.get("order_id", 0)),
+        days_overdue=int(finding.get("days_overdue", 1)),
+        current_location=finding.get("current_location"),
+        item_summary=finding.get("item_summary") or "—",
+    )
 
 
 async def _notify_delay_to_admin(finding: dict) -> None:

@@ -19,18 +19,28 @@ from app.services import proactive_risk_scanner
 @pytest.mark.asyncio
 async def test_notification_skipped_when_flag_off(db):
     """PROACTIVE_NOTIFICATIONS_ENABLED=False ise hiçbir Telegram çağrısı olmaz."""
-    finding = {"customer_id": 1, "order_id": 42, "days_overdue": 3, "current_location": "Ankara"}
-
+    finding = {
+        "customer_id": 1,
+        "customer_name": "X",
+        "telegram_user_id": 12345,
+        "order_id": 42,
+        "days_overdue": 3,
+        "current_location": "Ankara",
+    }
+    send_mock = AsyncMock()
     with patch.object(
         proactive_risk_scanner.settings, "PROACTIVE_NOTIFICATIONS_ENABLED", False
+    ), patch(
+        "app.integrations.telegram_client.telegram_client.send_message",
+        new=send_mock,
     ):
-        # SessionLocal'ı bile import etmemeli — exit erken
         await proactive_risk_scanner._notify_delay_to_customer(finding)
         await proactive_risk_scanner._notify_delay_to_admin(finding)
+    send_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_notify_customer_with_telegram_id():
+async def test_notify_customer_with_telegram_id(db):
     """Müşterinin tg_id'si finding'de varsa Telegram mesajı gönderilir."""
     finding = {
         "customer_id": 1,
@@ -39,6 +49,7 @@ async def test_notify_customer_with_telegram_id():
         "order_id": 99,
         "days_overdue": 2,
         "current_location": "İstanbul",
+        "item_summary": "2 Bal",
     }
 
     send_mock = AsyncMock()
@@ -53,12 +64,13 @@ async def test_notify_customer_with_telegram_id():
     send_mock.assert_awaited_once()
     args, _ = send_mock.call_args
     assert args[0] == 12345  # chat_id
+    # Mesaj template'de (fallback) sipariş no ve gün geçmeli
     assert "#99" in args[1]
     assert "2 gün" in args[1]
 
 
 @pytest.mark.asyncio
-async def test_notify_customer_skips_when_no_telegram():
+async def test_notify_customer_skips_when_no_telegram(db):
     """Müşterinin tg_id'si finding'de yoksa atlama."""
     finding = {
         "customer_id": 5,

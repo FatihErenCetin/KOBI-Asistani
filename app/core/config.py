@@ -26,6 +26,8 @@ class Settings(BaseSettings):
 
     # Proaktif Telegram bildirimleri (kargo gecikmesi vb.) — opt-in
     PROACTIVE_NOTIFICATIONS_ENABLED: bool = False
+    # Kargo durum değişikliği bildirimleri (kargoya verildi, yolda, teslim) — opt-in
+    SHIPMENT_NOTIFICATIONS_ENABLED: bool = False
 
     # Sosyal medya görsel/video üretim provider'ları
     IMAGE_PROVIDER: str = "placeholder"  # placeholder | openai

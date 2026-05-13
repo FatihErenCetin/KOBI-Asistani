@@ -8,6 +8,7 @@ from app.db.crud import orders as orders_crud
 from app.db.crud import products as products_crud
 from app.db.models import OrderStatus, ShipmentStatus
 from app.integrations import cargo_mock
+from app.services import shipment_notifier
 from app.schemas.order import (
     CustomerSummary,
     OrderCreate,
@@ -113,6 +114,7 @@ async def patch_status(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
     old_status = order.status
     order.status = new_status
+    shipment_to_notify = None
     if (
         old_status != OrderStatus.SHIPPED
         and new_status == OrderStatus.SHIPPED
@@ -120,6 +122,11 @@ async def patch_status(
     ):
         shipment = await cargo_mock.create_shipment(db, order)
         shipment.status = ShipmentStatus.PICKED_UP
+        shipment_to_notify = shipment
     await db.commit()
+    if shipment_to_notify is not None:
+        await shipment_notifier.notify_status_change(
+            db, shipment_to_notify, ShipmentStatus.PICKED_UP
+        )
     refreshed = await orders_crud.get_by_id(db, order.id)
     return _to_out(refreshed)
