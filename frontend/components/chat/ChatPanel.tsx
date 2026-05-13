@@ -19,6 +19,7 @@ import {
 import {
   CategoryStockRender,
   FastDepletingRender,
+  FinancialOverviewRender,
   LowMarginRender,
   ProductAnalyticsCard,
   SupplierPerformanceRender,
@@ -158,6 +159,8 @@ function RenderData({ data }: { data: any }) {
   if (data.type === "product_analytics")
     return <ProductAnalyticsCard data={data} />;
   if (data.type === "category_stock") return <CategoryStockRender data={data} />;
+  if (data.type === "financial_overview")
+    return <FinancialOverviewRender data={data} />;
   return null;
 }
 

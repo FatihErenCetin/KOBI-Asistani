@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Clock, Package, TrendingDown } from "lucide-react";
+import { AlertTriangle, Clock, DollarSign, Package, TrendingDown } from "lucide-react";
 import Link from "next/link";
 
 import { formatDateTime, formatTRY } from "@/lib/format";
@@ -271,6 +271,88 @@ export function CategoryStockRender({ data }: { data: any }) {
         ))}
       </tbody>
     </table>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  FinancialOverviewRender                                                    */
+/* -------------------------------------------------------------------------- */
+
+export function FinancialOverviewRender({ data }: { data: any }) {
+  const s = data?.summary;
+  const breakdown = data?.expense_breakdown ?? [];
+  if (!s) return null;
+  const profitColor =
+    s.net_profit >= 0 ? "text-emerald-700" : "text-rose-700";
+
+  return (
+    <div className="mt-2 bg-white border border-slate-200 rounded p-3 max-w-md">
+      <header className="flex items-center gap-1.5 mb-2 pb-2 border-b border-slate-100">
+        <DollarSign className="h-4 w-4 text-emerald-600" />
+        <span className="font-semibold text-sm">
+          Finansal Özet ({s.since_days} gün)
+        </span>
+      </header>
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+        <dt className="text-slate-500">Gelir</dt>
+        <dd className="text-right font-medium">{formatTRY(s.revenue)}</dd>
+        <dt className="text-slate-500">COGS (satış maliyeti)</dt>
+        <dd className="text-right">{formatTRY(s.cogs)}</dd>
+        <dt className="text-slate-500">Brüt Kâr</dt>
+        <dd className="text-right">
+          {formatTRY(s.gross_profit)}{" "}
+          <span className="text-slate-400">(%{s.gross_margin_pct})</span>
+        </dd>
+        <dt className="text-slate-500">Giderler</dt>
+        <dd className="text-right">{formatTRY(s.operating_expenses)}</dd>
+        <dt className="text-slate-500 font-medium">Net Kâr</dt>
+        <dd className={`text-right font-semibold ${profitColor}`}>
+          {formatTRY(s.net_profit)}{" "}
+          <span className="text-slate-400 font-normal">
+            (%{s.net_margin_pct})
+          </span>
+        </dd>
+        {s.revenue_change_pct != null && (
+          <>
+            <dt className="text-slate-500 text-[10px]">Önceki döneme göre</dt>
+            <dd className="text-right text-[10px]">
+              <span
+                className={
+                  s.revenue_change_pct >= 0
+                    ? "text-emerald-700"
+                    : "text-rose-700"
+                }
+              >
+                Gelir %{s.revenue_change_pct.toFixed(1)}
+              </span>
+            </dd>
+          </>
+        )}
+      </dl>
+      {breakdown.length > 0 && (
+        <div className="mt-3 pt-2 border-t border-slate-100">
+          <p className="text-[10px] text-slate-500 mb-1.5">Gider dağılımı:</p>
+          <ul className="text-[11px] space-y-0.5">
+            {breakdown.slice(0, 5).map((b: any) => (
+              <li key={b.category} className="flex justify-between">
+                <span className="text-slate-600">{b.category}</span>
+                <span>
+                  {formatTRY(b.total)}{" "}
+                  <span className="text-slate-400">%{b.share_pct}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <p className="text-[10px] text-slate-400 mt-2">
+        Detaylar için{" "}
+        <Link href="/finance" className="text-brand-700 hover:underline">
+          Finansal Analiz
+        </Link>{" "}
+        sayfası.
+      </p>
+    </div>
   );
 }
 

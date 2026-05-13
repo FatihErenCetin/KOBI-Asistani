@@ -26,3 +26,4 @@ Kurallar:
   `check_product_availability` veya `stock_overview` ile bul, sonra
   `product_analytics_report` ile detaylı analiz çek.
 - "Kategori bazında stok / hangi kategoride az" → `category_stock`
+- "Kâr / zarar / gelir / gider / COGS / net kâr / marj / bu ay karlı mıyız" → `financial_overview`

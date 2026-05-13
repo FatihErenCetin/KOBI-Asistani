@@ -54,3 +54,14 @@ async def category_stock(*, ctx: AgentContext) -> dict:
         return {"error": "Bu islem icin yetkiniz yok."}
     rows = await product_analytics.category_stock_overview(ctx.db)
     return {"categories": rows}
+
+
+async def financial_overview(since_days: int = 30, *, ctx: AgentContext) -> dict:
+    """Son N gun finansal ozet: gelir, COGS, brut/net kar, opex, marjlar, delta."""
+    if not ctx.is_admin:
+        return {"error": "Bu islem icin yetkiniz yok."}
+    from app.db.crud import financial_analytics as fin
+
+    summary = await fin.period_summary(ctx.db, since_days=since_days)
+    breakdown = await fin.category_breakdown(ctx.db, since_days=since_days)
+    return {"summary": summary, "expense_breakdown": breakdown}

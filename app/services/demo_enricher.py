@@ -19,6 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.crud import stock_balances as sb_crud
 from app.db.models import (
+    Expense,
+    ExpenseCategory,
     PriceHistory,
     PriceHistoryField,
     Product,
@@ -432,6 +434,93 @@ async def ensure_price_history(db: AsyncSession) -> dict:
     return {"price_history_rows_created": rows_created}
 
 
+# Gider şablonları — her ay tekrarlanır
+RECURRING_EXPENSES_MONTHLY = [
+    # (category, base_amount, vendor, description, day_of_month, jitter_pct)
+    (ExpenseCategory.RENT, 12000.0, "Mülk sahibi", "Aylık dükkân kirası", 1, 0.0),
+    (ExpenseCategory.SALARIES, 38000.0, "Bordro", "Personel maaşları", 5, 0.0),
+    (ExpenseCategory.UTILITIES, 1800.0, "BEDAŞ", "Elektrik faturası", 15, 0.15),
+    (ExpenseCategory.UTILITIES, 650.0, "İSKİ", "Su faturası", 18, 0.10),
+    (ExpenseCategory.UTILITIES, 420.0, "Türk Telekom", "İnternet+telefon", 20, 0.05),
+    (ExpenseCategory.INSURANCE, 1500.0, "Anadolu Sigorta", "İşyeri sigortası", 10, 0.0),
+]
+
+# Aralıklı (her ay olmayan) giderler
+SPORADIC_EXPENSES = [
+    # (category, base_amount, vendor, description, prob_per_month, jitter_pct)
+    (ExpenseCategory.MARKETING, 2500.0, "Sosyal medya ajansı", "Reklam kampanyası", 0.7, 0.4),
+    (ExpenseCategory.LOGISTICS, 1200.0, "Yurt İçi Kargo", "Aylık kargo hesabı", 0.85, 0.3),
+    (ExpenseCategory.MAINTENANCE, 800.0, "Servis", "Soğutucu bakımı", 0.3, 0.5),
+    (ExpenseCategory.SUPPLIES, 600.0, "OfisMix", "Ofis malzemeleri", 0.5, 0.4),
+    (ExpenseCategory.TAX, 7500.0, "GİB", "KDV ödemesi", 0.33, 0.0),  # ~3 ayda bir
+    (ExpenseCategory.OTHER, 450.0, "Notere", "Çeşitli harçlar", 0.25, 0.3),
+]
+
+
+async def ensure_expenses(db: AsyncSession, months: int = 6) -> dict:
+    """Son N ay için gerçekçi gider kayıtları üretir. Idempotent: zaten varsa atlanır."""
+    from sqlalchemy import func
+
+    # Zaten gider varsa atla
+    count_res = await db.execute(select(func.count(Expense.id)))
+    if int(count_res.scalar_one() or 0) > 0:
+        return {"expenses_created": 0}
+
+    rng = random.Random(2025)  # deterministik
+    today = date.today()
+    created = 0
+
+    for m_offset in range(months):
+        # Hedef ay başı
+        ref = (today.replace(day=1) - timedelta(days=m_offset * 30)).replace(day=1)
+
+        # Tekrar eden aylık giderler
+        for category, base, vendor, desc, day, jitter in RECURRING_EXPENSES_MONTHLY:
+            try:
+                incurred = ref.replace(day=min(day, 28))
+            except ValueError:
+                incurred = ref
+            amount = base * (1 + rng.uniform(-jitter, jitter)) if jitter > 0 else base
+            # Aylık enflasyon: eski aylarda biraz daha düşük (3%/ay)
+            amount = amount * (1 - 0.03 * m_offset / 12)
+            db.add(
+                Expense(
+                    category=category,
+                    amount=round(amount, 2),
+                    vendor=vendor,
+                    description=desc,
+                    incurred_at=datetime.combine(incurred, datetime.min.time())
+                    + timedelta(hours=rng.randint(9, 17)),
+                    is_recurring=True,
+                )
+            )
+            created += 1
+
+        # Aralıklı giderler
+        for category, base, vendor, desc, prob, jitter in SPORADIC_EXPENSES:
+            if rng.random() > prob:
+                continue
+            day = rng.randint(1, 28)
+            incurred = ref.replace(day=day)
+            amount = base * (1 + rng.uniform(-jitter, jitter))
+            amount = amount * (1 - 0.02 * m_offset / 12)
+            db.add(
+                Expense(
+                    category=category,
+                    amount=round(amount, 2),
+                    vendor=vendor,
+                    description=desc,
+                    incurred_at=datetime.combine(incurred, datetime.min.time())
+                    + timedelta(hours=rng.randint(9, 17)),
+                    is_recurring=False,
+                )
+            )
+            created += 1
+
+    await db.flush()
+    return {"expenses_created": created}
+
+
 async def enrich_all(db: AsyncSession) -> dict:
     """Tüm idempotent zenginleştirmeleri sırayla uygula."""
     result = {}
@@ -443,6 +532,8 @@ async def enrich_all(db: AsyncSession) -> dict:
     result.update(await ensure_lots(db))
     # Fiyat geçmişi — son
     result.update(await ensure_price_history(db))
+    # Finansal mock data — son 6 ay giderler
+    result.update(await ensure_expenses(db, months=6))
     await db.commit()
     logger.info("Demo enrichment complete: %s", result)
     return result

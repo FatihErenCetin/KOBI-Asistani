@@ -172,6 +172,26 @@ def _build_tools() -> list[ToolSpec]:
             parameters={"type": "object", "properties": {}},
             handler=analytics_tools.category_stock,
         ),
+        ToolSpec(
+            name="financial_overview",
+            description=(
+                "Belirtilen son N gun icin finansal ozet: gelir, satilan urunun "
+                "maliyeti (COGS), brut kar, operasyonel giderler, net kar, "
+                "marjlar, oncekı donemle karsilastirma. Ayrica gider kategorileri. "
+                "Kullanim: 'bu ay karli miyiz', 'gider kalemleri nedir', "
+                "'kar zarar tablosu'."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "since_days": {
+                        "type": "integer",
+                        "description": "Geriye dogru gun sayisi (default 30)",
+                    }
+                },
+            },
+            handler=analytics_tools.financial_overview,
+        ),
     ]
 
 
@@ -206,6 +226,8 @@ def _infer_render_type(tool_calls: list[dict]) -> dict | None:
         return {"type": "product_analytics", **result}
     if name == "category_stock":
         return {"type": "category_stock", **result}
+    if name == "financial_overview":
+        return {"type": "financial_overview", **result}
     return {"type": "raw", **result}
 
 

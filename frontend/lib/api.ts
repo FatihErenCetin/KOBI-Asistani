@@ -207,6 +207,35 @@ export const api = {
   expiringLots: (within_days = 14) =>
     request<any[]>(`/products/expiring?within_days=${within_days}`),
 
+  // Finance
+  financeSummary: (since_days = 30) =>
+    request<any>(`/finance/summary?since_days=${since_days}`),
+  financeMonthlyTrend: (months = 6) =>
+    request<any[]>(`/finance/monthly-trend?months=${months}`),
+  financeCategoryBreakdown: (since_days = 30) =>
+    request<any[]>(`/finance/category-breakdown?since_days=${since_days}`),
+  financeTopProducts: (since_days = 30, limit = 10) =>
+    request<any[]>(
+      `/finance/top-products?since_days=${since_days}&limit=${limit}`,
+    ),
+  listExpenses: (params?: {
+    since_days?: number;
+    category?: string;
+    limit?: number;
+  }) => request<any[]>(`/finance/expenses${qs(params)}`),
+  createExpense: (data: Record<string, any>) =>
+    request<any>("/finance/expenses", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateExpense: (id: number, data: Record<string, any>) =>
+    request<any>(`/finance/expenses/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteExpense: (id: number) =>
+    request<void>(`/finance/expenses/${id}`, { method: "DELETE" }),
+
   // Complaints
   listComplaints: () => request<any[]>("/complaints"),
   resolveComplaint: (id: number) =>

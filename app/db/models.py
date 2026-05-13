@@ -386,6 +386,45 @@ class LotAction(Base):
     lot: Mapped["StockLot"] = relationship()
 
 
+class ExpenseCategory(str, enum.Enum):
+    RENT = "rent"
+    SALARIES = "salaries"
+    UTILITIES = "utilities"
+    MARKETING = "marketing"
+    LOGISTICS = "logistics"
+    MAINTENANCE = "maintenance"
+    TAX = "tax"
+    SUPPLIES = "supplies"
+    INSURANCE = "insurance"
+    OTHER = "other"
+
+
+class Expense(Base):
+    """Isletme gideri — kira, maas, fatura, lojistik, vergi vs.
+
+    incurred_at: Giderin gerceklestigi tarih (fatura kesim tarihi).
+    created_at: Sistem kaydi zamani — gecmise donuk girilebilir.
+    """
+
+    __tablename__ = "expenses"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    category: Mapped[ExpenseCategory] = mapped_column(
+        Enum(ExpenseCategory, name="expense_category"), index=True
+    )
+    amount: Mapped[float] = mapped_column(Float)
+    vendor: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    incurred_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, index=True
+    )
+    is_recurring: Mapped[bool] = mapped_column(default=False)
+    created_by_admin_id: Mapped[int | None] = mapped_column(
+        ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class CustomerComplaint(Base):
     """Sikayet riski tespitleri — hem reaktif (Telegram mesaj sinyali) hem
     proaktif (kargo gecikmesi, bayat siparis, mukerrer sikayet vs.) kaynaklar.

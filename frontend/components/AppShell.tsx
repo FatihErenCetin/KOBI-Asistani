@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Calendar,
+  DollarSign,
   LayoutDashboard,
   MessageSquareWarning,
   ShoppingBag,
@@ -27,6 +28,7 @@ const NAV = [
   { href: "/reorder", label: "Sipariş Önerileri", icon: ShoppingBag },
   { href: "/suppliers", label: "Tedarikçiler", icon: Truck },
   { href: "/customers", label: "Müşteriler", icon: Users },
+  { href: "/finance", label: "Finansal Analiz", icon: DollarSign },
   { href: "/complaints", label: "Şikayet Riski", icon: MessageSquareWarning },
   { href: "/chat", label: "AI Asistan", icon: Sparkles },
 ];
