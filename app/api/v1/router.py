@@ -8,6 +8,7 @@ from app.api.v1 import (
     mock_cargo,
     orders,
     products,
+    suppliers,
     webhooks,
 )
 
@@ -16,6 +17,7 @@ api_router.include_router(webhooks.router, tags=["webhooks"])
 api_router.include_router(auth.router)
 api_router.include_router(orders.router)
 api_router.include_router(products.router)
+api_router.include_router(suppliers.router)
 api_router.include_router(customers.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(mock_cargo.router)
