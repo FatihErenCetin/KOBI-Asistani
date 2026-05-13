@@ -13,6 +13,7 @@ from app.api.v1 import (
     orders,
     products,
     reorder,
+    social,
     suppliers,
     warehouses,
     webhooks,
@@ -34,3 +35,4 @@ api_router.include_router(customers.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(mock_cargo.router)
 api_router.include_router(chat.router)
+api_router.include_router(social.router)

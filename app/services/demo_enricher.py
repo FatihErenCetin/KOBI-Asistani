@@ -25,6 +25,10 @@ from app.db.models import (
     PriceHistoryField,
     Product,
     ProductSupplier,
+    SocialAccount,
+    SocialPlatform,
+    SocialPost,
+    SocialPostStatus,
     StockBalance,
     StockLot,
     StockMovement,
@@ -35,6 +39,8 @@ from app.db.models import (
 from app.db.seed import (
     LOT_CATALOG,
     MULTI_WAREHOUSE_SPLIT,
+    SOCIAL_ACCOUNT_CATALOG,
+    SOCIAL_POST_CATALOG,
     SUPPLIER_CATALOG,
     WAREHOUSE_CATALOG,
 )
@@ -521,6 +527,101 @@ async def ensure_expenses(db: AsyncSession, months: int = 6) -> dict:
     return {"expenses_created": created}
 
 
+async def ensure_social_accounts(db: AsyncSession) -> dict:
+    """SOCIAL_ACCOUNT_CATALOG'taki hesapları idempotent ekle.
+
+    Eşleştirme: (platform, handle) tek anahtar. Zaten varsa atlanır.
+    """
+    res = await db.execute(select(SocialAccount))
+    existing = {(a.platform, a.handle) for a in res.scalars()}
+
+    created = 0
+    for platform_value, handle, display_name, profile_url in SOCIAL_ACCOUNT_CATALOG:
+        try:
+            platform = SocialPlatform(platform_value)
+        except ValueError:
+            continue
+        if (platform, handle) in existing:
+            continue
+        db.add(
+            SocialAccount(
+                platform=platform,
+                handle=handle,
+                display_name=display_name,
+                profile_url=profile_url,
+                is_active=True,
+            )
+        )
+        created += 1
+    await db.flush()
+    return {"social_accounts_created": created}
+
+
+async def ensure_social_posts(db: AsyncSession) -> dict:
+    """SOCIAL_POST_CATALOG'taki örnek postları idempotent ekle.
+
+    Eşleştirme: title alanına göre. Zaten varsa atlanır.
+    """
+    count_res = await db.execute(select(func.count(SocialPost.id)))
+    if int(count_res.scalar_one() or 0) > 0:
+        # Zaten en az 1 post var — yine de duplicate olmayanları ekleyelim
+        existing_titles_res = await db.execute(select(SocialPost.title))
+        existing_titles = {t[0] for t in existing_titles_res.all()}
+    else:
+        existing_titles = set()
+
+    # Ürünleri ad → id eşle
+    prod_res = await db.execute(select(Product))
+    products_by_name = {p.name: p for p in prod_res.scalars()}
+
+    created = 0
+    now = datetime.utcnow()
+    for (
+        title,
+        content,
+        platforms_csv,
+        hashtags_csv,
+        status_value,
+        days_offset,
+        product_name,
+        ai_generated,
+        prompt,
+    ) in SOCIAL_POST_CATALOG:
+        if title in existing_titles:
+            continue
+        try:
+            status = SocialPostStatus(status_value)
+        except ValueError:
+            status = SocialPostStatus.DRAFT
+        product = products_by_name.get(product_name) if product_name else None
+
+        published_at = None
+        scheduled_at = None
+        if status == SocialPostStatus.PUBLISHED:
+            published_at = now + timedelta(days=days_offset)
+        elif status == SocialPostStatus.SCHEDULED:
+            scheduled_at = now + timedelta(days=max(days_offset, 1))
+
+        db.add(
+            SocialPost(
+                title=title,
+                content=content,
+                target_platforms=platforms_csv,
+                hashtags=hashtags_csv,
+                status=status,
+                scheduled_at=scheduled_at,
+                published_at=published_at,
+                ai_generated=ai_generated,
+                prompt=prompt,
+                related_product_id=product.id if product else None,
+            )
+        )
+        created += 1
+
+    await db.flush()
+    return {"social_posts_created": created}
+
+
 async def enrich_all(db: AsyncSession) -> dict:
     """Tüm idempotent zenginleştirmeleri sırayla uygula."""
     result = {}
@@ -534,6 +635,9 @@ async def enrich_all(db: AsyncSession) -> dict:
     result.update(await ensure_price_history(db))
     # Finansal mock data — son 6 ay giderler
     result.update(await ensure_expenses(db, months=6))
+    # Sosyal medya — hesaplar + örnek postlar
+    result.update(await ensure_social_accounts(db))
+    result.update(await ensure_social_posts(db))
     await db.commit()
     logger.info("Demo enrichment complete: %s", result)
     return result

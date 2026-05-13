@@ -6,6 +6,7 @@ import {
   Calendar,
   DollarSign,
   LayoutDashboard,
+  Megaphone,
   MessageSquareWarning,
   ShoppingBag,
   ShoppingCart,
@@ -29,6 +30,7 @@ const NAV = [
   { href: "/suppliers", label: "Tedarikçiler", icon: Truck },
   { href: "/customers", label: "Müşteriler", icon: Users },
   { href: "/finance", label: "Finansal Analiz", icon: DollarSign },
+  { href: "/social", label: "Sosyal Medya", icon: Megaphone },
   { href: "/complaints", label: "Şikayet Riski", icon: MessageSquareWarning },
   { href: "/chat", label: "AI Asistan", icon: Sparkles },
 ];

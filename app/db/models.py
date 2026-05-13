@@ -386,6 +386,127 @@ class LotAction(Base):
     lot: Mapped["StockLot"] = relationship()
 
 
+class SocialPlatform(str, enum.Enum):
+    INSTAGRAM = "instagram"
+    YOUTUBE = "youtube"
+    TIKTOK = "tiktok"
+    FACEBOOK = "facebook"
+    TWITTER = "twitter"
+    THREADS = "threads"
+    LINKEDIN = "linkedin"
+
+
+class SocialPostStatus(str, enum.Enum):
+    DRAFT = "draft"
+    SCHEDULED = "scheduled"
+    PUBLISHING = "publishing"
+    PUBLISHED = "published"
+    FAILED = "failed"
+
+
+class SocialAssetType(str, enum.Enum):
+    IMAGE = "image"
+    VIDEO = "video"
+
+
+class SocialAssetStatus(str, enum.Enum):
+    PENDING = "pending"
+    GENERATING = "generating"
+    READY = "ready"
+    FAILED = "failed"
+
+
+class SocialAccount(Base):
+    """Sosyal medya hesabı bağlantısı. access_token gerçek API entegrasyonunda."""
+
+    __tablename__ = "social_accounts"
+    __table_args__ = (
+        UniqueConstraint("platform", "handle", name="uq_social_platform_handle"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    platform: Mapped[SocialPlatform] = mapped_column(
+        Enum(SocialPlatform, name="social_platform"), index=True
+    )
+    handle: Mapped[str] = mapped_column(String(100))
+    display_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    profile_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    access_token: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    is_active: Mapped[bool] = mapped_column(default=True, index=True)
+    connected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class SocialPost(Base):
+    """Sosyal medya gönderisi (multi-platform).
+
+    target_platforms: virgülle ayrılmış platform değerleri (örn. 'instagram,tiktok')
+    hashtags: virgülle ayrılmış (örn. 'kobi,bal,dogal')
+    """
+
+    __tablename__ = "social_posts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    content: Mapped[str] = mapped_column(String(3000))
+    target_platforms: Mapped[str] = mapped_column(String(200))
+    hashtags: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    status: Mapped[SocialPostStatus] = mapped_column(
+        Enum(SocialPostStatus, name="social_post_status"),
+        default=SocialPostStatus.DRAFT,
+        index=True,
+    )
+    scheduled_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, index=True
+    )
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    ai_generated: Mapped[bool] = mapped_column(default=False)
+    prompt: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    related_product_id: Mapped[int | None] = mapped_column(
+        ForeignKey("products.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_by_admin_id: Mapped[int | None] = mapped_column(
+        ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, index=True
+    )
+
+    assets: Mapped[list["SocialAsset"]] = relationship(
+        back_populates="post", cascade="all, delete-orphan"
+    )
+    related_product: Mapped["Product | None"] = relationship()
+
+
+class SocialAsset(Base):
+    """Bir post için üretilmiş görsel/video.
+
+    provider: 'placeholder' (mock), 'openai' (DALL-E), 'replicate' vb.
+    Mock placeholder URL'leri picsum.photos veya statik logo döner.
+    """
+
+    __tablename__ = "social_assets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    post_id: Mapped[int] = mapped_column(
+        ForeignKey("social_posts.id", ondelete="CASCADE"), index=True
+    )
+    asset_type: Mapped[SocialAssetType] = mapped_column(
+        Enum(SocialAssetType, name="social_asset_type")
+    )
+    prompt: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    provider: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    status: Mapped[SocialAssetStatus] = mapped_column(
+        Enum(SocialAssetStatus, name="social_asset_status"),
+        default=SocialAssetStatus.PENDING,
+    )
+    error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    post: Mapped["SocialPost"] = relationship(back_populates="assets")
+
+
 class ExpenseCategory(str, enum.Enum):
     RENT = "rent"
     SALARIES = "salaries"

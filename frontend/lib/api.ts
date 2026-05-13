@@ -324,6 +324,59 @@ export const api = {
       body: JSON.stringify({ message, history }),
     }),
 
+  // Social media management
+  socialTemplates: () => request<any[]>("/social/templates"),
+  listSocialAccounts: (include_inactive = false) =>
+    request<any[]>(`/social/accounts${qs({ include_inactive })}`),
+  createSocialAccount: (data: Record<string, any>) =>
+    request<any>("/social/accounts", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateSocialAccount: (id: number, data: Record<string, any>) =>
+    request<any>(`/social/accounts/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteSocialAccount: (id: number) =>
+    request<void>(`/social/accounts/${id}`, { method: "DELETE" }),
+  listSocialPosts: (status?: string) =>
+    request<any[]>(`/social/posts${qs({ status })}`),
+  getSocialPost: (id: number) => request<any>(`/social/posts/${id}`),
+  createSocialPost: (data: Record<string, any>) =>
+    request<any>("/social/posts", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateSocialPost: (id: number, data: Record<string, any>) =>
+    request<any>(`/social/posts/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteSocialPost: (id: number) =>
+    request<void>(`/social/posts/${id}`, { method: "DELETE" }),
+  draftSocialPost: (data: {
+    prompt: string;
+    product_id?: number;
+    discount_pct?: number;
+    target_platforms?: string[];
+    template_id?: string;
+  }) =>
+    request<any>("/social/draft", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  generateSocialAsset: (
+    post_id: number,
+    data: { asset_type: string; prompt: string; size?: string },
+  ) =>
+    request<any>(`/social/posts/${post_id}/assets`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  publishSocialPost: (post_id: number) =>
+    request<any>(`/social/posts/${post_id}/publish`, { method: "POST" }),
+
   // Auth
   me: () => request<any>("/auth/me"),
 };

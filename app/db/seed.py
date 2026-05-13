@@ -140,6 +140,91 @@ LOT_CATALOG = [
     ("Pekmez", "PKM-2510-01", 1.0, 365, 0),
 ]
 
+# Sosyal medya hesapları: (platform, handle, display_name, profile_url)
+SOCIAL_ACCOUNT_CATALOG = [
+    (
+        "instagram",
+        "kobimarket",
+        "KOBİ Market",
+        "https://instagram.com/kobimarket",
+    ),
+    (
+        "tiktok",
+        "kobimarket",
+        "KOBİ Market",
+        "https://tiktok.com/@kobimarket",
+    ),
+    (
+        "youtube",
+        "kobimarket",
+        "KOBİ Market Kanalı",
+        "https://youtube.com/@kobimarket",
+    ),
+]
+
+# Sosyal medya örnek postları:
+# (title, content, target_platforms_csv, hashtags_csv, status,
+#  days_offset, product_name_or_none, ai_generated, prompt_or_none)
+# days_offset: bugünden negatif = geçmişte yayınlanmış, pozitif = ileride
+#              scheduled, 0 = bugün draft.
+SOCIAL_POST_CATALOG = [
+    (
+        "Bal Kampanyası - %15 İndirim",
+        "🍯 Doğal çiçek balımız bu hafta %15 indirimde! Kavanozun tadı bal gibi tatlı, fiyatı daha da tatlı. Stoklar tükenmeden alın.\n\nCam kavanoz 1kg — şimdi sadece sınırlı sayıda.",
+        "instagram,tiktok",
+        "#bal,#dogal,#kobimarket,#indirim,#kampanya",
+        "published",
+        -5,
+        "Bal",
+        True,
+        "Bal ürünümüze %15 indirim kampanyası başlat",
+    ),
+    (
+        "Yeni Zeytinyağı Geldi 🫒",
+        "Erken hasat naturel sızma zeytinyağımız raflarda! Bu yılın ilk hasadı, taşları soğuk sıkım. Sınırlı stok.",
+        "instagram",
+        "#zeytinyagi,#erkenhasat,#dogal,#kobimarket",
+        "published",
+        -12,
+        "Zeytinyagi",
+        True,
+        "Yeni gelen erken hasat zeytinyağı için tanıtım postu",
+    ),
+    (
+        "Son Kullanma Yaklaşıyor — Domates Salça Önerisi",
+        "Sevgili müşterilerimiz, taze domateslerimiz bu hafta son rafa giriyor. Hemen alıp salça yapmak için harika bir fırsat. 1kg domatesle ev yapımı salça tarifimiz hikayelerde.",
+        "instagram,tiktok",
+        "#domates,#salca,#sonkullanma,#tariffirsati",
+        "draft",
+        0,
+        "Domates",
+        True,
+        "Son kullanma yaklaşan domates için müşteri uyarısı + tarif önerisi",
+    ),
+    (
+        "Hafta Sonu Kampanyası",
+        "Bu hafta sonu reçel ürünlerimizde 2 al 1 öde! Kayısı, vişne, çilek — hepsi ev yapımı. Cumartesi-pazar geçerli.",
+        "instagram,tiktok,youtube",
+        "#recel,#haftasonu,#kampanya,#kobimarket",
+        "scheduled",
+        2,
+        "Recel",
+        False,
+        None,
+    ),
+    (
+        "Mutfağımızdan: Tarhana Çorbası Tarifi 🍲",
+        "Kış soğuğunda canınızı ısıtacak ev yapımı tarhanamızdan klasik tarhana çorbası tarifimiz YouTube'da! Tek tutam tarhana, taze tereyağı ve sevgi yeter.",
+        "youtube,instagram",
+        "#tarhana,#tarif,#kisicin,#evyapimi",
+        "draft",
+        0,
+        "Tarhana",
+        True,
+        "Tarhana ürünü için tarif videosu duyurusu",
+    ),
+]
+
 CUSTOMER_NAMES = [
     "Ayse Yilmaz", "Mehmet Kaya", "Fatma Demir", "Ahmet Sahin", "Zeynep Celik",
     "Mustafa Aydin", "Elif Ozdemir", "Ali Arslan", "Hatice Dogan", "Hasan Polat",

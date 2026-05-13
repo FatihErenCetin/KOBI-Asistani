@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     # Proaktif Telegram bildirimleri (kargo gecikmesi vb.) — opt-in
     PROACTIVE_NOTIFICATIONS_ENABLED: bool = False
 
+    # Sosyal medya görsel/video üretim provider'ları
+    IMAGE_PROVIDER: str = "placeholder"  # placeholder | openai
+    OPENAI_API_KEY: str = ""
+
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_WEBHOOK_SECRET: str = "change_me"
 
