@@ -9,6 +9,7 @@ import {
   Users,
   Sparkles,
   LogOut,
+  Truck,
 } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,6 +18,7 @@ const NAV = [
   { href: "/", label: "Bugün", icon: LayoutDashboard, exact: true },
   { href: "/orders", label: "Siparişler", icon: ShoppingCart },
   { href: "/products", label: "Ürünler", icon: Package },
+  { href: "/suppliers", label: "Tedarikçiler", icon: Truck },
   { href: "/customers", label: "Müşteriler", icon: Users },
   { href: "/chat", label: "AI Asistan", icon: Sparkles },
 ];
