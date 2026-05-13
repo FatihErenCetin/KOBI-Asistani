@@ -7,6 +7,27 @@ from app.db.models import Customer
 from app.tools import order_tools, product_tools, shipping_tools
 from app.tools.base import AgentContext
 
+MAX_HISTORY_TURNS = 4  # Son 4 user+assistant cifti tutulur (~8 mesaj)
+
+# In-memory conversation history: telegram_user_id -> [{"role": ..., "content": ...}]
+# Uvicorn single-worker olduğu için process-local cache güvenli.
+# Backend restart'ta sıfırlanır (kabul edilebilir kayıp — demo amaçlı).
+_history_cache: dict[int, list[dict]] = {}
+
+
+def _get_history(tg_user_id: int) -> list[dict]:
+    return _history_cache.get(tg_user_id, [])
+
+
+def _append_history(tg_user_id: int, user_msg: str, assistant_msg: str) -> None:
+    hist = _history_cache.setdefault(tg_user_id, [])
+    hist.append({"role": "user", "content": user_msg})
+    hist.append({"role": "model", "content": assistant_msg})
+    # Trim — son MAX_HISTORY_TURNS x 2 mesajı tut
+    max_messages = MAX_HISTORY_TURNS * 2
+    if len(hist) > max_messages:
+        del hist[: len(hist) - max_messages]
+
 logger = logging.getLogger(__name__)
 
 PROMPT_PATH = Path(__file__).parent / "prompts" / "customer_persona.md"
@@ -45,8 +66,35 @@ def _build_tools() -> list[ToolSpec]:
             handler=order_tools.list_my_recent_orders,
         ),
         ToolSpec(
+            name="search_products",
+            description=(
+                "KULLAN: Musteri urun katalogu, kategori veya 'ne tur X var' "
+                "tarzinda genel/listeleme sorulari sordugunda. Ornek: "
+                "'hangi ballar var', 'urunler neler', 'peynir cesitleri'. "
+                "Bos query ile cagirirsan tum urunleri doner."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": (
+                            "Aranan urun adi veya kategori. Tum urunler icin bos string."
+                        ),
+                    },
+                    "limit": {"type": "integer"},
+                },
+                "required": ["query"],
+            },
+            handler=product_tools.search_products,
+        ),
+        ToolSpec(
             name="check_product_availability",
-            description="Verilen urun adi ve miktari icin stokta var mi kontrol eder.",
+            description=(
+                "KULLAN: Kullanici BELIRLI miktarda urun istiyor ve stok var mi soruyor. "
+                "Ornek: '5 kilo domates stokta var mi?'. "
+                "KULLANMA: Sadece 'ne var' tarzinda genel soruda — search_products kullan."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
@@ -59,7 +107,10 @@ def _build_tools() -> list[ToolSpec]:
         ),
         ToolSpec(
             name="get_product_price",
-            description="Bir urunun birim fiyatini doner.",
+            description=(
+                "KULLAN: Sadece fiyat sorgusu. Ornek: 'bal ne kadar?', 'fiyat ne?'. "
+                "KULLANMA: Stok da gerekiyorsa check_product_availability kullan."
+            ),
             parameters={
                 "type": "object",
                 "properties": {"name": {"type": "string"}},
@@ -127,16 +178,23 @@ async def handle_message(
         is_admin=False,
         telegram_user_id=telegram_user_id,
     )
-    system_prompt = _PROMPT_TEMPLATE.format(
-        customer_name=customer.name, customer_id=customer.id
+    system_prompt = (
+        _PROMPT_TEMPLATE
+        .replace("{customer_name}", customer.name)
+        .replace("{customer_id}", str(customer.id))
     )
     tools = _build_tools()
+    history = _get_history(telegram_user_id)
     result = await llm_core.run_agent_loop(
         system_prompt=system_prompt,
         user_message=message,
         tools=tools,
+        history=history,
         extra_context={"ctx": ctx},
     )
+    # Bu turn'u history'e kaydet (bir sonraki mesajda context olacak)
+    if result.text:
+        _append_history(telegram_user_id, message, result.text)
     await db.commit()
 
     draft_id = None

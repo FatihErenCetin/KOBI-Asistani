@@ -32,6 +32,34 @@ async def get_product_price(name: str, *, ctx: AgentContext) -> dict:
     }
 
 
+async def search_products(query: str, *, limit: int = 8, ctx: AgentContext) -> dict:
+    """Musteri urun katalogu arar — kategori/genel soru icin.
+
+    'Hangi ballar var', 'sutluler', 'bal cesitleri' gibi sorgularda kullanilir.
+    Bos string ile cagrilirsa tum ana urunleri listeler.
+    """
+    matches = await products_crud.search_by_name(ctx.db, query or "", limit=limit)
+    if not matches:
+        # Bos arama ise tum urunleri getir
+        matches = await products_crud.list_all(ctx.db)
+        matches = matches[:limit]
+    if not matches:
+        return {"count": 0, "products": [], "note": "Urun katalogu su an bos."}
+    return {
+        "count": len(matches),
+        "products": [
+            {
+                "name": p.name,
+                "unit": p.unit,
+                "price": p.price,
+                "in_stock": p.stock > 0,
+                "aliases": p.aliases or "",
+            }
+            for p in matches
+        ],
+    }
+
+
 async def stock_overview(*, low_only: bool = False, ctx: AgentContext) -> dict:
     if not ctx.is_admin:
         return {"error": "Bu islem icin yetkiniz yok."}
