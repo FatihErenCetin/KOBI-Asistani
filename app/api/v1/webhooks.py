@@ -55,11 +55,20 @@ async def telegram_inbound(
     if msg.voice:
         transcriber = stt.get_transcriber()
         try:
-            text = await transcriber.transcribe(msg.voice.file_id)
+            audio_url = await telegram_client.get_file_url(msg.voice.file_id)
+            text = await transcriber.transcribe(audio_url, lang="tr")
+            logger.info("STT transkripti: %s", text[:120])
         except stt.STTDisabledError:
             await telegram_client.send_message(
                 tg_user_id,
-                "Sesli mesaj destegi yakinda geliyor. Yazili olarak iletebilir misiniz?",
+                "Sesli mesaj desteği yakında geliyor. Yazılı olarak iletebilir misiniz?",
+            )
+            return {"ok": True}
+        except stt.STTFailedError as e:
+            logger.warning("STT failed: %s", e)
+            await telegram_client.send_message(
+                tg_user_id,
+                "Sesli mesajı çözemedim, yazılı olarak iletebilir misiniz?",
             )
             return {"ok": True}
     else:
