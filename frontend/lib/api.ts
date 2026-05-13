@@ -1,53 +1,106 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
-const TOKEN = process.env.NEXT_PUBLIC_ADMIN_TOKEN ?? "";
+import { clearAuth } from "@/lib/auth";
 
-async function request<T>(
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
+const BASE =
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
+const FALLBACK_TOKEN = process.env.NEXT_PUBLIC_ADMIN_TOKEN ?? "";
+const TOKEN_KEY = "kobi-auth-token";
+
+/**
+ * Runtime-resolved bearer token.
+ * - Client (browser): prefer user's JWT from localStorage, fallback to ADMIN_TOKEN.
+ * - Server (RSC/SSR): always ADMIN_TOKEN (backend accepts both — hybrid auth).
+ */
+function getAuthToken(): string {
+  if (typeof window !== "undefined") {
+    try {
+      const stored = window.localStorage.getItem(TOKEN_KEY);
+      if (stored) return stored;
+    } catch {
+      /* fall through */
+    }
+  }
+  return FALLBACK_TOKEN;
+}
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const token = getAuthToken();
+
   const r = await fetch(`${BASE}${path}`, {
     ...init,
     cache: "no-store",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${TOKEN}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init.headers ?? {}),
     },
   });
+
+  if (r.status === 401) {
+    if (typeof window !== "undefined") {
+      clearAuth();
+      // Avoid redirect loop from the login page itself
+      if (!window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login";
+      }
+    }
+    throw new Error("Oturum sona erdi");
+  }
+
   if (!r.ok) {
     const body = await r.text().catch(() => "");
     throw new Error(`API ${r.status}: ${body}`);
   }
+
   return r.json() as Promise<T>;
 }
 
+/* -------------------------------------------------------------------------- */
+/*  Public API                                                                 */
+/* -------------------------------------------------------------------------- */
+
+function qs(params?: Record<string, string | number | boolean | undefined>): string {
+  if (!params) return "";
+  const entries = Object.entries(params).filter(
+    ([, v]) => v !== undefined && v !== "" && v !== null,
+  );
+  if (entries.length === 0) return "";
+  return (
+    "?" +
+    new URLSearchParams(entries.map(([k, v]) => [k, String(v)])).toString()
+  );
+}
+
 export const api = {
+  // Dashboard
   dashboardToday: () => request<any>("/dashboard/today"),
-  listOrders: (params: Record<string, string | number> = {}) => {
-    const qs = new URLSearchParams(params as any).toString();
-    return request<any[]>(`/orders${qs ? `?${qs}` : ""}`);
-  },
+
+  // Orders
+  listOrders: (params?: Record<string, string | number | undefined>) =>
+    request<any[]>(`/orders${qs(params)}`),
   getOrder: (id: number) => request<any>(`/orders/${id}`),
   patchOrderStatus: (id: number, status: string) =>
     request<any>(`/orders/${id}/status`, {
       method: "PATCH",
       body: JSON.stringify({ status }),
     }),
-  listProducts: (params: { search?: string; low_stock_only?: boolean } = {}) => {
-    const qs = new URLSearchParams(
-      Object.entries(params).reduce<Record<string, string>>((acc, [k, v]) => {
-        if (v !== undefined && v !== null) acc[k] = String(v);
-        return acc;
-      }, {}),
-    ).toString();
-    return request<any[]>(`/products${qs ? `?${qs}` : ""}`);
-  },
+
+  // Products
+  listProducts: (params?: { search?: string; low_stock_only?: boolean }) =>
+    request<any[]>(`/products${qs(params)}`),
+  getProduct: (id: number) => request<any>(`/products/${id}`),
+
+  // Customers — backend uses `search` query param
   listCustomers: (search?: string) =>
-    request<any[]>(`/customers${search ? `?search=${encodeURIComponent(search)}` : ""}`),
+    request<any[]>(`/customers${qs({ search })}`),
   customerOrders: (id: number) => request<any[]>(`/customers/${id}/orders`),
+
+  // Chat — backend route is /panel/chat (router prefix /panel, endpoint /chat)
   panelChat: (message: string, history?: any[]) =>
     request<{ text: string; data: any | null }>("/panel/chat", {
       method: "POST",
       body: JSON.stringify({ message, history }),
     }),
+
+  // Auth
+  me: () => request<any>("/auth/me"),
 };
