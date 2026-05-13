@@ -211,6 +211,15 @@ export const api = {
   listComplaints: () => request<any[]>("/complaints"),
   resolveComplaint: (id: number) =>
     request<any>(`/complaints/${id}/resolve`, { method: "POST" }),
+  scanComplaints: () =>
+    request<{
+      shipment_delay: number;
+      slow_shipment: number;
+      stale_pending: number;
+      repeat_complainer: number;
+      dormant_customer: number;
+      total: number;
+    }>("/complaints/scan", { method: "POST" }),
 
   // Reorder suggestions + draft mail
   reorderSuggestions: () => request<any[]>("/reorder/suggestions"),

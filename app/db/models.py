@@ -340,10 +340,12 @@ class StockLot(Base):
 
 
 class CustomerComplaint(Base):
-    """Sikayet sinyali algilanmis musteri mesajlari.
+    """Sikayet riski tespitleri — hem reaktif (Telegram mesaj sinyali) hem
+    proaktif (kargo gecikmesi, bayat siparis, mukerrer sikayet vs.) kaynaklar.
 
-    Webhook handler her gelen mesaja paralel risk skoru hesaplar (regex onfiltre
-    + LLM); 0.7 ustu skor bu tabloya kayit duser.
+    Reactive: webhook handler regex+LLM ile mesaja skor verir.
+    Proactive: scheduled agent sistem verisinde anomaliler arar, her bulgu
+    icin subject+description'i kendisi yazar.
     """
 
     __tablename__ = "customer_complaints"
@@ -353,9 +355,17 @@ class CustomerComplaint(Base):
         ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, index=True
     )
     telegram_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    message_text: Mapped[str] = mapped_column(String(2000))
+    subject: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    message_text: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     risk_score: Mapped[float] = mapped_column(Float, index=True)
     signals: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    source: Mapped[str] = mapped_column(
+        String(40), default="telegram_message", index=True
+    )
+    related_entity_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    related_entity_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    auto_generated: Mapped[bool] = mapped_column(default=False, index=True)
     resolved: Mapped[bool] = mapped_column(default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, index=True
