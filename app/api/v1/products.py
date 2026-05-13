@@ -81,7 +81,7 @@ async def _detailed(db: AsyncSession, product_id: int) -> ProductOutDetailed:
         **out.model_dump(),
         created_at=p.created_at,
         updated_at=p.updated_at,
-        suppliers=[_link_to_out(l) for l in links],
+        suppliers=[_link_to_out(link) for link in links],
         analytics=ProductAnalytics(**anal),
     )
 
@@ -227,7 +227,7 @@ async def get_sparkline(
 @router.get("/{product_id}/suppliers", response_model=list[ProductSupplierLinkOut])
 async def list_links(product_id: int, db: AsyncSession = Depends(get_db)):
     links = await ps_crud.list_for_product(db, product_id)
-    return [_link_to_out(l) for l in links]
+    return [_link_to_out(link) for link in links]
 
 
 @router.post(

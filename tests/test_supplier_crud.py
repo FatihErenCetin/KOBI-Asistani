@@ -31,7 +31,7 @@ async def test_add_link_with_preferred_flips_existing(db):
     await ps_crud.add_link(db, product_id=p.id, supplier_id=s1.id, is_preferred=True)
     await ps_crud.add_link(db, product_id=p.id, supplier_id=s2.id, is_preferred=True)
     links = await ps_crud.list_for_product(db, p.id)
-    preferred = [l for l in links if l.is_preferred]
+    preferred = [link for link in links if link.is_preferred]
     assert len(preferred) == 1
     assert preferred[0].supplier_id == s2.id
 

@@ -115,7 +115,8 @@ async def test_supplier_link_lifecycle(client, auth):
         f"/api/v1/products/{pid}/suppliers", headers=auth,
     )
     assert any(
-        l["supplier_id"] == sid and l["is_preferred"] for l in ll.json()
+        link["supplier_id"] == sid and link["is_preferred"]
+        for link in ll.json()
     )
 
     r2 = await client.patch(

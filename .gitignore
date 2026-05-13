@@ -3,6 +3,10 @@ __pycache__/
 .venv/
 venv/
 .env
+.env.local
+.env.*.local
+next-env.d.ts
+tsconfig.tsbuildinfo
 .pytest_cache/
 .ruff_cache/
 node_modules/

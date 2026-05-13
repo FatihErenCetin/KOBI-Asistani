@@ -314,7 +314,7 @@ async def run(demo_fixtures: bool, clear: bool):
         if clear:
             await clear_all(db)
         products = await seed_products(db)
-        suppliers = await seed_suppliers(db, products)
+        await seed_suppliers(db, products)
         customers = await seed_customers(db)
         await seed_orders(db, customers, products, total=200)
         if demo_fixtures:
